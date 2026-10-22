@@ -1,0 +1,52 @@
+# --- Build Directories & CMake ---
+build/
+bin/
+out/
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+*.cmake
+!CMakeLists.txt
+*.ninja
+.ninja_*
+
+# --- Compiled Object & Library Files ---
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+
+# --- IDEs & Editors ---
+# Visual Studio
+.vs/
+*.vcxproj.user
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# VS Code
+.vscode/
+settings.json
+tasks.json
+
+# Xcode & CLion / JetBrains
+.idea/
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+cmake-build-*/
+
+# --- Debug & Profiling ---
+*.log
+*.su
+*.idb
+*.pdb
+.DS_Store
+Thumbs.db
+*.dSYM/
