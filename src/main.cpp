@@ -1,8 +1,8 @@
-#include <cstdio>
+#include "dungeon/core/version.hpp"
 
-int main(int argc, char** argv)
-{
-    std::printf("Hello World!\n");
+#include <iostream>
 
+int main() {
+    std::cout << dungeon::core::kProjectName << ' ' << dungeon::core::kVersion << '\n';
     return 0;
 }

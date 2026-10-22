@@ -8,6 +8,7 @@ CMakeScripts/
 Testing/
 *.cmake
 !CMakeLists.txt
+!cmake/*.cmake
 *.ninja
 .ninja_*
 
