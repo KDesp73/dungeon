@@ -1,30 +1,50 @@
 # dungeon
 
-A real-time, top-down 2D action RPG that runs entirely in a terminal, written
-in C++20 without a game engine.
+A real-time, top-down 2D action RPG under development in C++20 for the
+terminal, built without a game engine.
 
-The game renders with ANSI colours and character cells, reads input directly
-from the tty, and keeps the simulation independent from the presentation layer
-so that every gameplay rule can be unit tested.
+The long-term direction is ANSI-coloured character-cell rendering with a
+simulation kept independent from the presentation layer, so every gameplay
+rule can be unit tested. The current build provides the build and test
+scaffolding, terminal-size detection, and procedural ASCII map generation.
+Input, the game loop, entities, and combat are still to come.
 
 ## Status
 
-The project is at the start of stage 1 of the development plan
-(see [AGENT.md](AGENT.md)). The repository currently holds the build and test
-scaffolding only:
+| Area         | State                                                                 |
+| ------------ | --------------------------------------------------------------------- |
+| Build system | CMake presets, strict warnings, ASan/UBSan, CTest, GitHub Actions      |
+| Terminal     | `dungeon::core::term_size()` reads the terminal dimensions            |
+| Map          | Random rooms, doors, and connected walkways; `MapSpec` replay; seeds   |
+| Rendering    | ASCII output through `Map::print()`; no ANSI colour or framebuffer yet |
+| Tests        | Lightweight harness with `core` and `map` suites                       |
+| Gameplay     | Not started: no game loop, input, player, entities, or combat yet      |
 
-| Area         | State                                                                |
-| ------------ | -------------------------------------------------------------------- |
-| Build system | CMake + presets, strict warnings, sanitizer options, CTest, CI         |
-| Tests        | Lightweight test harness, one suite (`core`)                         |
-| Code         | `dungeon::core::kVersion` and a placeholder `main()`                  |
+The executable currently prints the project version, the run seed, and a
+generated ASCII dungeon sized to half the terminal.
 
-Everything else - terminal handling, the game loop, world, entities, systems
-and rendering - is still to be written.
+## Map output
+
+Generated maps use these glyphs:
+
+| Glyph    | Tile                              |
+| -------- | --------------------------------- |
+| `-`, `\|` | room walls                        |
+| `.`      | room floor                        |
+| `#`      | walkway                           |
+| `+`      | door                              |
+| `@`      | player (reserved, not placed yet) |
+| `K`      | key (reserved, not placed yet)    |
+| space    | empty space outside rooms         |
+
+Every map has a seed exposed through `Map::seed()`; the executable prints it so
+a run can later be replayed once seed input is supported. `Map::make_spec()`
+returns a `MapSpec`, and `Map::generate(const MapSpec&)` rebuilds that exact
+layout without regenerating anything randomly.
 
 ## Requirements
 
-- CMake 3.20 or newer
+- CMake 3.21 or newer
 - A C++20 compiler (GCC 11+, Clang 14+, Apple Clang 14+)
 - Ninja (optional, only for the presets that use it)
 - A POSIX system: Linux, macOS or a similar Unix
@@ -71,11 +91,13 @@ cmake --build build -j
 ```sh
 ctest --preset dev --output-on-failure
 ./build/dev/tests/dungeon_tests --suite core   # run a single suite
+./build/dev/tests/dungeon_tests --suite map    # run the map tests
 ./build/dev/tests/dungeon_tests --list          # list every test case
 ```
 
 Each subdirectory of `tests/` that contains test cases becomes one CTest
-entry; the suite name is the directory name.
+entry; the suite name is the directory name. The current suites are `core`
+and `map`.
 
 ## Sanitizers
 
@@ -98,11 +120,16 @@ dungeon/
 ├── cmake/                    build system modules (warnings, sanitizers)
 ├── docs/                     architecture and design notes
 ├── include/dungeon/          public headers, mirrors src/
-│   └── core/
-├── src/                      implementation
-│   ├── core/
+│   ├── core/                 terminal size and version
+│   └── map/                  map generation and tile API
+├── src/
+│   ├── core/                 terminal and version implementations
+│   ├── map/                  map generation, tiles, and rendering
 │   └── main.cpp              process entry point
-└── tests/                    one directory per tested subsystem
+└── tests/
+    ├── core/                 core suite
+    ├── map/                  map suite
+    └── test_harness.*        lightweight test framework
 ```
 
 New subsystems get a directory under `include/dungeon/` and `src/`; see
