@@ -9,6 +9,7 @@ namespace dungeon::map {
 
 /// Terrain occupying a single map cell.
 enum class Tile : unsigned char {
+    Empty,
     HWall,
     VWall,
     Walkway,
@@ -74,7 +75,7 @@ public:
     ///
     /// The number, positions, and dimensions of the rooms vary on every call.
     /// If the requested dimensions are too small to contain a valid dungeon,
-    /// the map is left as open floor. The map never exceeds @p width by
+    /// the map is left as open background. The map never exceeds @p width by
     /// @p height.
     void generate(std::size_t width = 64, std::size_t height = 32);
 

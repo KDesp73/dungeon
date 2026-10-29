@@ -93,15 +93,15 @@ DUNGEON_TEST(map, generate_keeps_rooms_inside_the_margin)
 
     for (std::size_t x = 0; x < map.width(); ++x) {
         for (std::size_t y = 0; y < 2; ++y) {
-            CHECK(map.at(x, y) == Tile::Floor);
-            CHECK(map.at(x, map.height() - 1 - y) == Tile::Floor);
+            CHECK(map.at(x, y) == Tile::Empty);
+            CHECK(map.at(x, map.height() - 1 - y) == Tile::Empty);
         }
     }
 
     for (std::size_t y = 0; y < map.height(); ++y) {
         for (std::size_t x = 0; x < 2; ++x) {
-            CHECK(map.at(x, y) == Tile::Floor);
-            CHECK(map.at(map.width() - 1 - x, y) == Tile::Floor);
+            CHECK(map.at(x, y) == Tile::Empty);
+            CHECK(map.at(map.width() - 1 - x, y) == Tile::Empty);
         }
     }
 }
@@ -251,8 +251,8 @@ DUNGEON_TEST(map, walkway_diagonals_have_no_open_corners)
                             continue;
                         }
 
-                        const bool corner_a_is_floor = map.at(next_x, y) == Tile::Floor;
-                        const bool corner_b_is_floor = map.at(x, next_y) == Tile::Floor;
+                        const bool corner_a_is_floor = map.at(next_x, y) == Tile::Empty;
+                        const bool corner_b_is_floor = map.at(x, next_y) == Tile::Empty;
 
                         CHECK(!(corner_a_is_floor && corner_b_is_floor));
                     }
@@ -373,7 +373,7 @@ DUNGEON_TEST(map, generate_skips_rooms_when_the_map_is_too_small)
 
     for (std::size_t y = 0; y < map.height(); ++y) {
         for (std::size_t x = 0; x < map.width(); ++x) {
-            CHECK(map.at(x, y) == Tile::Floor);
+            CHECK(map.at(x, y) == Tile::Empty);
         }
     }
 }
@@ -388,7 +388,7 @@ DUNGEON_TEST(map, generate_replaces_existing_content)
 
     CHECK_EQ(map.width(), 64U);
     CHECK_EQ(map.height(), 32U);
-    CHECK(map.at(0, 0) == Tile::Floor);
+    CHECK(map.at(0, 0) == Tile::Empty);
 }
 
 DUNGEON_TEST(map, generate_with_a_zero_dimension_clears_the_map)
@@ -411,7 +411,7 @@ DUNGEON_TEST(map, set_updates_a_tile)
     map.set(2, 2, Tile::Door);
 
     CHECK(map.at(2, 2) == Tile::Door);
-    CHECK(map.at(3, 2) == Tile::Floor);
+    CHECK(map.at(3, 2) == Tile::Empty);
 }
 
 DUNGEON_TEST(map, coordinates_outside_the_map_are_rejected)
@@ -448,7 +448,8 @@ DUNGEON_TEST(map, tiles_have_ascii_glyphs)
     CHECK_EQ(dungeon::map::glyph(Tile::HWall), '-');
     CHECK_EQ(dungeon::map::glyph(Tile::VWall), '|');
     CHECK_EQ(dungeon::map::glyph(Tile::Walkway), '#');
-    CHECK_EQ(dungeon::map::glyph(Tile::Floor), ' ');
+    CHECK_EQ(dungeon::map::glyph(Tile::Floor), '.');
+    CHECK_EQ(dungeon::map::glyph(Tile::Empty), ' ');
     CHECK_EQ(dungeon::map::glyph(Tile::Player), '@');
     CHECK_EQ(dungeon::map::glyph(Tile::Key), 'K');
     CHECK_EQ(dungeon::map::glyph(Tile::Door), 'D');

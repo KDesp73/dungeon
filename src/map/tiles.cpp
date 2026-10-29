@@ -10,6 +10,8 @@ namespace dungeon::map {
 char glyph(Tile tile) noexcept
 {
     switch (tile) {
+    case Tile::Empty:
+        return ' ';
     case Tile::HWall:
         return '-';
     case Tile::VWall:
@@ -17,7 +19,7 @@ char glyph(Tile tile) noexcept
     case Tile::Walkway:
         return '#';
     case Tile::Floor:
-        return ' ';
+        return '.';
     case Tile::Player:
         return '@';
     case Tile::Door:

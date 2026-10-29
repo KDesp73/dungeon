@@ -330,7 +330,7 @@ void Map::fill_walkway_corners(const std::vector<RoomSpec>& rooms)
     };
 
     const auto can_fill = [&](std::size_t x, std::size_t y) {
-        return at(x, y) == Tile::Floor && !inside_room(x, y);
+        return at(x, y) == Tile::Empty && !inside_room(x, y);
     };
 
     bool changed = true;
@@ -515,7 +515,7 @@ void Map::generate(const MapSpec& spec)
 
     _width  = spec.width;
     _height = spec.height;
-    _tiles.assign(_width * _height, Tile::Floor);
+    _tiles.assign(_width * _height, Tile::Empty);
 
     for (const ConnectionSpec& connection : spec.connections) {
         if (connection.from >= spec.rooms.size() || connection.to >= spec.rooms.size()) {
