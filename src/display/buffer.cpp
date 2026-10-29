@@ -1,5 +1,6 @@
 #include "dungeon/display/buffer.hpp"
 #include <cstddef>
+#include <cstdio>
 
 namespace dungeon::display {
 
@@ -14,12 +15,19 @@ void FrameBuffer::draw(std::size_t x, std::size_t y, char c)
 
 void FrameBuffer::present()
 {
+    std::fputs("\033[H", stdout);
+
     std::swap(_back_buffer, _front_buffer);
 
-    // TODO: Flush _front_buffer characters to the actual terminal screen here,
-    // or compare against previous states for differential rendering.
+    for (std::size_t y = 0; y < _height; ++y) {
+        // fwrite prints an entire row efficiently in a single system call
+        std::fwrite(&_front_buffer[y * _width], sizeof(char), _width, stdout);
+        std::fputc('\n', stdout);
+    }
 
-    std::copy(_front_buffer.begin(), _front_buffer.end(), _back_buffer.begin());
+    std::fflush(stdout);
+
+    std::fill(_back_buffer.begin(), _back_buffer.end(), ' ');
 }
 
 }
