@@ -8,10 +8,7 @@ int main() {
 
     auto map = dungeon::map::Map();
 
-    map.generate(32, 32);
-
-    map.set(10, 10, dungeon::map::Tile::Player);
-
+    map.generate();
     map.print();
 
     return 0;

@@ -38,10 +38,18 @@ include(Sanitizers)
 # point lives here so that it can be linked into tests without a terminal.
 # ---------------------------------------------------------------------------
 
-add_library(dungeon_core STATIC
-    src/core/version.cpp
-    src/map/map.cpp
-)
+# Collect every implementation file under src/, except the executable entry
+# point. CONFIGURE_DEPENDS makes the build system notice added or renamed files
+# without a manual configure step (supported by Ninja and Makefile generators).
+file(GLOB_RECURSE DUNGEON_CORE_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+list(REMOVE_ITEM DUNGEON_CORE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
+
+if(NOT DUNGEON_CORE_SOURCES)
+    message(FATAL_ERROR "No game sources found under ${CMAKE_CURRENT_SOURCE_DIR}/src")
+endif()
+
+add_library(dungeon_core STATIC ${DUNGEON_CORE_SOURCES})
 add_library(dungeon::core ALIAS dungeon_core)
 
 target_include_directories(dungeon_core
