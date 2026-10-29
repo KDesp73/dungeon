@@ -8,5 +8,7 @@
 #endif
 
 namespace dungeon::core {
+
 void term_size(int& width, int& height);
-}
+
+} // namespace dungeon::core

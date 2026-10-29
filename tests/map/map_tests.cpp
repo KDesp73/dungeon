@@ -7,7 +7,9 @@
 #include <stdexcept>
 #include <string>
 
+using dungeon::map::DoorSide;
 using dungeon::map::Map;
+using dungeon::map::MapSpec;
 using dungeon::map::Tile;
 
 namespace {
@@ -151,6 +153,80 @@ DUNGEON_TEST(map, generate_varies_room_layout_and_count)
 
     CHECK(door_counts.size() > 1);
     CHECK(layouts.size() > 1);
+}
+
+DUNGEON_TEST(map, make_spec_describes_the_generated_dungeon)
+{
+    Map map;
+    const MapSpec spec = map.make_spec(80, 40);
+
+    CHECK_EQ(spec.width, 80U);
+    CHECK_EQ(spec.height, 40U);
+    CHECK(spec.rooms.size() >= 2);
+    CHECK_EQ(spec.connections.size(), spec.rooms.size() - 1);
+
+    for (const dungeon::map::ConnectionSpec& connection : spec.connections) {
+        CHECK(connection.from < spec.rooms.size());
+        CHECK(connection.to < spec.rooms.size());
+    }
+}
+
+DUNGEON_TEST(map, generate_recreates_a_spec_exactly)
+{
+    Map random_map;
+    const MapSpec spec = random_map.make_spec();
+
+    Map first;
+    first.generate(spec);
+
+    Map second;
+    second.generate(spec);
+
+    CHECK_EQ(first.width(), spec.width);
+    CHECK_EQ(first.height(), spec.height);
+    CHECK(snapshot(first) == snapshot(second));
+}
+
+DUNGEON_TEST(map, generate_builds_an_explicit_spec)
+{
+    MapSpec spec;
+    spec.width  = 20;
+    spec.height = 10;
+    spec.rooms  = {{2, 2, 6, 5}, {12, 2, 6, 5}};
+    spec.connections = {{0, 1, DoorSide::Right, DoorSide::Left}};
+
+    Map map;
+    map.generate(spec);
+
+    CHECK_EQ(map.width(), 20U);
+    CHECK_EQ(map.height(), 10U);
+
+    CHECK(map.at(2, 2) == Tile::HWall);
+    CHECK(map.at(7, 2) == Tile::HWall);
+    CHECK(map.at(2, 6) == Tile::HWall);
+    CHECK(map.at(17, 6) == Tile::HWall);
+
+    CHECK(map.at(3, 3) == Tile::Floor);
+    CHECK(map.at(13, 3) == Tile::Floor);
+
+    CHECK(map.at(7, 4) == Tile::Door);
+    CHECK(map.at(12, 4) == Tile::Door);
+
+    for (std::size_t x = 8; x < 12; ++x) {
+        CHECK(map.at(x, 4) == Tile::Walkway);
+    }
+}
+
+DUNGEON_TEST(map, generate_rejects_connections_to_unknown_rooms)
+{
+    MapSpec spec;
+    spec.width  = 10;
+    spec.height = 10;
+    spec.rooms  = {{2, 2, 4, 4}};
+    spec.connections = {{0, 1, DoorSide::Right, DoorSide::Left}};
+
+    Map map;
+    CHECK_THROWS_AS(map.generate(spec), std::out_of_range);
 }
 
 DUNGEON_TEST(map, generate_skips_rooms_when_the_map_is_too_small)

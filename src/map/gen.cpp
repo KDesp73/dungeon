@@ -119,17 +119,15 @@ void Map::walkway(std::size_t start_x, std::size_t start_y, std::size_t end_x, s
     }
 }
 
-void Map::generate(std::size_t width, std::size_t height)
+MapSpec Map::make_spec(std::size_t width, std::size_t height)
 {
-    clear();
+    MapSpec spec;
+    spec.width  = width;
+    spec.height = height;
 
     if (width == 0 || height == 0) {
-        return;
+        return spec;
     }
-
-    _width  = width;
-    _height = height;
-    _tiles.assign(width * height, Tile::Floor);
 
     constexpr std::size_t margin          = 2;
     constexpr std::size_t min_room_width  = 6;
@@ -142,7 +140,7 @@ void Map::generate(std::size_t width, std::size_t height)
     constexpr std::size_t placement_tries = 50;
 
     if (width < margin * 2 + min_room_width || height < margin * 2 + min_room_height) {
-        return;
+        return spec;
     }
 
     const std::size_t usable_width  = width - margin * 2;
@@ -156,15 +154,7 @@ void Map::generate(std::size_t width, std::size_t height)
     std::uniform_int_distribution<std::size_t> room_count_dist(min_rooms, room_limit);
     const std::size_t target_rooms = room_count_dist(_rng);
 
-    struct RoomSpec {
-        std::size_t x;
-        std::size_t y;
-        std::size_t width;
-        std::size_t height;
-    };
-
-    std::vector<RoomSpec> rooms;
-    rooms.reserve(target_rooms);
+    spec.rooms.reserve(target_rooms);
 
     std::uniform_int_distribution<std::size_t> width_dist(
         min_room_width, std::min(max_room_width, usable_width));
@@ -173,7 +163,7 @@ void Map::generate(std::size_t width, std::size_t height)
 
     const std::size_t max_attempts = target_rooms * placement_tries;
 
-    for (std::size_t attempt = 0; attempt < max_attempts && rooms.size() < target_rooms;
+    for (std::size_t attempt = 0; attempt < max_attempts && spec.rooms.size() < target_rooms;
          ++attempt) {
         const std::size_t room_width  = width_dist(_rng);
         const std::size_t room_height = height_dist(_rng);
@@ -185,7 +175,7 @@ void Map::generate(std::size_t width, std::size_t height)
         const std::size_t room_y = y_dist(_rng);
 
         bool overlaps = false;
-        for (const RoomSpec& other : rooms) {
+        for (const RoomSpec& other : spec.rooms) {
             if (room_x < other.x + other.width + room_padding &&
                 room_x + room_width + room_padding > other.x &&
                 room_y < other.y + other.height + room_padding &&
@@ -196,25 +186,20 @@ void Map::generate(std::size_t width, std::size_t height)
         }
 
         if (!overlaps) {
-            rooms.push_back(RoomSpec{room_x, room_y, room_width, room_height});
+            spec.rooms.push_back(RoomSpec{room_x, room_y, room_width, room_height});
         }
     }
 
-    if (rooms.size() < min_rooms) {
-        return;
-    }
-
-    for (const RoomSpec& spec : rooms) {
-        room(spec.x, spec.y, spec.width, spec.height);
+    if (spec.rooms.size() < min_rooms) {
+        spec.rooms.clear();
+        return spec;
     }
 
     const auto side_facing = [](const RoomSpec& from, const RoomSpec& to) {
-        const std::ptrdiff_t from_x =
-            static_cast<std::ptrdiff_t>(from.x + from.width / 2);
-        const std::ptrdiff_t from_y =
-            static_cast<std::ptrdiff_t>(from.y + from.height / 2);
-        const std::ptrdiff_t to_x = static_cast<std::ptrdiff_t>(to.x + to.width / 2);
-        const std::ptrdiff_t to_y = static_cast<std::ptrdiff_t>(to.y + to.height / 2);
+        const std::ptrdiff_t from_x = static_cast<std::ptrdiff_t>(from.x + from.width / 2);
+        const std::ptrdiff_t from_y = static_cast<std::ptrdiff_t>(from.y + from.height / 2);
+        const std::ptrdiff_t to_x   = static_cast<std::ptrdiff_t>(to.x + to.width / 2);
+        const std::ptrdiff_t to_y   = static_cast<std::ptrdiff_t>(to.y + to.height / 2);
 
         const std::ptrdiff_t dx = to_x - from_x;
         const std::ptrdiff_t dy = to_y - from_y;
@@ -234,27 +219,66 @@ void Map::generate(std::size_t width, std::size_t height)
         return static_cast<std::size_t>(std::abs(bx - ax) + std::abs(by - ay));
     };
 
-    for (std::size_t i = 1; i < rooms.size(); ++i) {
+    for (std::size_t i = 1; i < spec.rooms.size(); ++i) {
         std::size_t nearest          = 0;
         std::size_t nearest_distance = std::numeric_limits<std::size_t>::max();
 
         for (std::size_t j = 0; j < i; ++j) {
-            const std::size_t distance = center_distance(rooms[i], rooms[j]);
+            const std::size_t distance = center_distance(spec.rooms[i], spec.rooms[j]);
             if (distance < nearest_distance) {
                 nearest_distance = distance;
                 nearest          = j;
             }
         }
 
-        const RoomSpec& from = rooms[i];
-        const RoomSpec& to   = rooms[nearest];
+        const RoomSpec& from = spec.rooms[i];
+        const RoomSpec& to   = spec.rooms[nearest];
+
+        spec.connections.push_back(
+            ConnectionSpec{i, nearest, side_facing(from, to), side_facing(to, from)});
+    }
+
+    return spec;
+}
+
+void Map::generate(const MapSpec& spec)
+{
+    clear();
+
+    if (spec.width == 0 || spec.height == 0) {
+        return;
+    }
+
+    _width  = spec.width;
+    _height = spec.height;
+    _tiles.assign(_width * _height, Tile::Floor);
+
+    for (const ConnectionSpec& connection : spec.connections) {
+        if (connection.from >= spec.rooms.size() || connection.to >= spec.rooms.size()) {
+            throw std::out_of_range(
+                "Map::generate: connection references a room that does not exist");
+        }
+    }
+
+    for (const RoomSpec& spec_room : spec.rooms) {
+        room(spec_room.x, spec_room.y, spec_room.width, spec_room.height);
+    }
+
+    for (const ConnectionSpec& connection : spec.connections) {
+        const RoomSpec& from = spec.rooms[connection.from];
+        const RoomSpec& to   = spec.rooms[connection.to];
 
         const Door from_door =
-            door(from.x, from.y, from.width, from.height, side_facing(from, to));
-        const Door to_door = door(to.x, to.y, to.width, to.height, side_facing(to, from));
+            door(from.x, from.y, from.width, from.height, connection.from_side);
+        const Door to_door = door(to.x, to.y, to.width, to.height, connection.to_side);
 
         walkway(from_door.x, from_door.y, to_door.x, to_door.y);
     }
+}
+
+void Map::generate(std::size_t width, std::size_t height)
+{
+    generate(make_spec(width, height));
 }
 
 } // namespace dungeon::map

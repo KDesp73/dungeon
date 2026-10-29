@@ -21,6 +21,47 @@ enum class Tile : unsigned char {
 /// ASCII glyph used to display a tile.
 [[nodiscard]] char glyph(Tile tile) noexcept;
 
+/// Side of a room where a door can be placed.
+enum class DoorSide : unsigned char {
+    Top,
+    Right,
+    Bottom,
+    Left,
+};
+
+/// Position and size of one room inside a `MapSpec`.
+///
+/// `width` and `height` include the walls, so a room of `6 x 5` has a
+/// `4 x 3` interior.
+struct RoomSpec {
+    std::size_t x      = 0;
+    std::size_t y      = 0;
+    std::size_t width  = 0;
+    std::size_t height = 0;
+};
+
+/// A walkway connecting two rooms in a `MapSpec`.
+///
+/// `from` and `to` index into `MapSpec::rooms`. The door on each room is
+/// placed in the middle of `from_side` / `to_side`.
+struct ConnectionSpec {
+    std::size_t from      = 0;
+    std::size_t to        = 0;
+    DoorSide    from_side = DoorSide::Right;
+    DoorSide    to_side   = DoorSide::Left;
+};
+
+/// Complete description of a generated dungeon.
+///
+/// Create one with `Map::make_spec()` and pass it to
+/// `Map::generate(const MapSpec&)` to rebuild the exact same map.
+struct MapSpec {
+    std::size_t                width  = 0;
+    std::size_t                height = 0;
+    std::vector<RoomSpec>       rooms;
+    std::vector<ConnectionSpec> connections;
+};
+
 /// A rectangular tile map.
 ///
 /// Tiles are stored in a single contiguous buffer in row-major order, so a map
@@ -29,13 +70,28 @@ class Map {
 public:
     Map() = default;
 
-    /// Builds a random dungeon of connected rooms.
+    /// Builds a random dungeon.
     ///
     /// The number, positions, and dimensions of the rooms vary on every call.
     /// If the requested dimensions are too small to contain a valid dungeon,
     /// the map is left as open floor. The map never exceeds @p width by
     /// @p height.
     void generate(std::size_t width = 64, std::size_t height = 32);
+
+    /// Builds the dungeon described by @p spec.
+    ///
+    /// The map is cleared first. Passing a spec produced by `make_spec()`
+    /// recreates that layout exactly.
+    ///
+    /// @throws std::invalid_argument when a room is smaller than 3x3.
+    /// @throws std::out_of_range when a room does not fit inside the map or a
+    ///         connection references a room that does not exist.
+    void generate(const MapSpec& spec);
+
+    /// Creates a random dungeon layout without changing the map.
+    ///
+    /// Pass the result to `generate(const MapSpec&)` to build it.
+    [[nodiscard]] MapSpec make_spec(std::size_t width = 64, std::size_t height = 32);
 
     /// Removes every tile and resets the map to zero width and height.
     void clear();
@@ -67,13 +123,6 @@ private:
     std::size_t _exit     = 0;
     std::vector<Tile> _tiles;
     std::mt19937 _rng{std::random_device{}()};
-
-    enum class DoorSide {
-        Top,
-        Right,
-        Bottom,
-        Left,
-    };
 
     struct Door {
         std::size_t x;

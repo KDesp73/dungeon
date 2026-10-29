@@ -25,4 +25,4 @@ void term_size(int& width, int& height)
 #endif
 }
 
-}
+} // namespace dungeon::core
