@@ -17,7 +17,7 @@ char glyph(Tile tile) noexcept
     case Tile::Walkway:
         return '#';
     case Tile::Floor:
-        return '.';
+        return ' ';
     case Tile::Player:
         return '@';
     case Tile::Door:

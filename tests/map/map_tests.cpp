@@ -27,28 +27,61 @@ DUNGEON_TEST(map, generate_defaults_to_64_by_32)
     CHECK(!map.empty());
 }
 
-DUNGEON_TEST(map, generate_draws_the_walkway)
+DUNGEON_TEST(map, generate_creates_rooms_with_doors)
 {
     Map map;
     map.generate();
 
-    CHECK(map.at(4, 29) == Tile::Walkway);
-    CHECK(map.at(25, 20) == Tile::Walkway);
+    constexpr std::size_t left_x   = 2;
+    constexpr std::size_t left_y   = 11;
+    constexpr std::size_t right_x  = 46;
+    constexpr std::size_t room_w   = 16;
+    constexpr std::size_t room_h   = 10;
+    constexpr std::size_t room_bot = left_y + room_h - 1;
+    constexpr std::size_t door_y   = left_y + room_h / 2;
 
-    std::size_t walkway_tiles = 0;
-    for (std::size_t y = 0; y < map.height(); ++y) {
-        for (std::size_t x = 0; x < map.width(); ++x) {
-            if (map.at(x, y) == Tile::Walkway) {
-                ++walkway_tiles;
-            }
-        }
+    for (std::size_t x = left_x; x < left_x + room_w; ++x) {
+        CHECK(map.at(x, left_y) == Tile::HWall);
+        CHECK(map.at(x, room_bot) == Tile::HWall);
+    }
+    for (std::size_t x = right_x; x < right_x + room_w; ++x) {
+        CHECK(map.at(x, left_y) == Tile::HWall);
+        CHECK(map.at(x, room_bot) == Tile::HWall);
     }
 
-    // max(dx, dy) + 1, where dx = 21 and dy = 9.
-    CHECK_EQ(walkway_tiles, 22U);
+    for (std::size_t y = left_y + 1; y < room_bot; ++y) {
+        CHECK(map.at(left_x, y) == Tile::VWall);
+        CHECK(map.at(right_x + room_w - 1, y) == Tile::VWall);
+    }
+
+    CHECK(map.at(left_x + room_w - 1, door_y) == Tile::Door);
+    CHECK(map.at(right_x, door_y) == Tile::Door);
+
+    CHECK(map.at(left_x + 1, left_y + 1) == Tile::Floor);
+    CHECK(map.at(right_x + 1, left_y + 1) == Tile::Floor);
 }
 
-DUNGEON_TEST(map, generate_skips_the_walkway_when_the_map_is_too_small)
+DUNGEON_TEST(map, generate_connects_doors_with_a_walkway)
+{
+    Map map;
+    map.generate();
+
+    constexpr std::size_t door_y     = 16;
+    constexpr std::size_t left_door  = 17;
+    constexpr std::size_t right_door = 46;
+
+    CHECK(map.at(left_door, door_y) == Tile::Door);
+    CHECK(map.at(right_door, door_y) == Tile::Door);
+
+    for (std::size_t x = left_door + 1; x < right_door; ++x) {
+        CHECK(map.at(x, door_y) == Tile::Walkway);
+    }
+
+    CHECK(map.at(left_door - 1, door_y) == Tile::Floor);
+    CHECK(map.at(right_door + 1, door_y) == Tile::Floor);
+}
+
+DUNGEON_TEST(map, generate_skips_rooms_when_the_map_is_too_small)
 {
     Map map;
     map.generate(5, 4);

@@ -6,7 +6,8 @@
 
 namespace dungeon::map {
 
-void Map::room(std::size_t x, std::size_t y, std::size_t width, std::size_t height)
+Map::Door Map::room(std::size_t x, std::size_t y, std::size_t width, std::size_t height,
+                     DoorSide door_side)
 {
     if (width < 3 || height < 3) {
         throw std::invalid_argument("Map::room: room must be at least 3x3");
@@ -35,6 +36,27 @@ void Map::room(std::size_t x, std::size_t y, std::size_t width, std::size_t heig
         set(x, row, Tile::VWall);
         set(right, row, Tile::VWall);
     }
+
+    std::size_t door_x = x + width / 2;
+    std::size_t door_y = y + height / 2;
+
+    switch (door_side) {
+    case DoorSide::Top:
+        door_y = y;
+        break;
+    case DoorSide::Right:
+        door_x = right;
+        break;
+    case DoorSide::Bottom:
+        door_y = bottom;
+        break;
+    case DoorSide::Left:
+        door_x = x;
+        break;
+    }
+
+    set(door_x, door_y, Tile::Door);
+    return Door{door_x, door_y};
 }
 
 void Map::walkway(std::size_t start_x, std::size_t start_y, std::size_t end_x, std::size_t end_y)
@@ -57,7 +79,12 @@ void Map::walkway(std::size_t start_x, std::size_t start_y, std::size_t end_x, s
     std::ptrdiff_t error = dx + dy;
 
     while (true) {
-        set(static_cast<std::size_t>(x), static_cast<std::size_t>(y), Tile::Walkway);
+        const std::size_t cell_x = static_cast<std::size_t>(x);
+        const std::size_t cell_y = static_cast<std::size_t>(y);
+
+        if (at(cell_x, cell_y) != Tile::Door) {
+            set(cell_x, cell_y, Tile::Walkway);
+        }
 
         if (x == x1 && y == y1) {
             break;
@@ -87,14 +114,25 @@ void Map::generate(std::size_t width, std::size_t height)
     _height = height;
     _tiles.assign(width * height, Tile::Floor);
 
-    constexpr std::size_t walkwayStartX = 4;
-    constexpr std::size_t walkwayStartY = 29;
-    constexpr std::size_t walkwayEndX   = 25;
-    constexpr std::size_t walkwayEndY   = 20;
+    constexpr std::size_t room_width  = 16;
+    constexpr std::size_t room_height = 10;
+    constexpr std::size_t margin      = 2;
+    constexpr std::size_t min_gap     = 4;
 
-    if (width > walkwayEndX && height > walkwayStartY) {
-        walkway(walkwayStartX, walkwayStartY, walkwayEndX, walkwayEndY);
+    if (width < room_width * 2 + margin * 2 + min_gap || height < room_height + margin * 2) {
+        return;
     }
+
+    const std::size_t room_y  = (height - room_height) / 2;
+    const std::size_t left_x  = margin;
+    const std::size_t right_x = width - room_width - margin;
+
+    const Door left_door =
+        room(left_x, room_y, room_width, room_height, DoorSide::Right);
+    const Door right_door =
+        room(right_x, room_y, room_width, room_height, DoorSide::Left);
+
+    walkway(left_door.x, left_door.y, right_door.x, right_door.y);
 }
 
 } // namespace dungeon::map
