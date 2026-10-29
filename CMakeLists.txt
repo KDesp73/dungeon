@@ -40,6 +40,7 @@ include(Sanitizers)
 
 add_library(dungeon_core STATIC
     src/core/version.cpp
+    src/map/map.cpp
 )
 add_library(dungeon::core ALIAS dungeon_core)
 
