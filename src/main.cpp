@@ -1,3 +1,4 @@
+#include "dungeon/core/term.hpp"
 #include "dungeon/core/version.hpp"
 #include "dungeon/map/map.hpp"
 
@@ -8,7 +9,10 @@ int main() {
 
     auto map = dungeon::map::Map();
 
-    map.generate();
+    int width = 0, height = 0;
+    dungeon::core::term_size(width, height);
+
+    map.generate(static_cast<std::size_t>(width), static_cast<std::size_t>(height));
     map.print();
 
     return 0;

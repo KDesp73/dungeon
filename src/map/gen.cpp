@@ -136,7 +136,7 @@ void Map::generate(std::size_t width, std::size_t height)
     constexpr std::size_t max_room_width  = 14;
     constexpr std::size_t min_room_height = 4;
     constexpr std::size_t max_room_height = 8;
-    constexpr std::size_t room_padding    = 1;
+    constexpr std::size_t room_padding    = 3;
     constexpr std::size_t min_rooms       = 2;
     constexpr std::size_t max_rooms       = 8;
     constexpr std::size_t placement_tries = 50;
