@@ -1,5 +1,7 @@
 #include "dungeon/map/map.hpp"
 
+#include <stdexcept>
+
 namespace dungeon::map {
 
 void Map::clear()
