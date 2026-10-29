@@ -153,14 +153,23 @@ private:
     [[nodiscard]] Door door(std::size_t x, std::size_t y, std::size_t width, std::size_t height,
                             DoorSide side);
 
-    /// Carves a straight line of `Tile::Walkway` from one cell to another.
+    /// Carves a walkway between two cells.
     ///
-    /// Uses Bresenham's algorithm, so the line is connected horizontally,
-    /// vertically, or diagonally. Any tile already on the line is replaced
-    /// except for doors, which are preserved as connection points.
+    /// Tries a straight Bresenham line first, so clear connections keep the
+    /// original diagonal look. If that line would enter a room, the walkway
+    /// falls back to a path that routes around the rooms instead.
     ///
     /// @throws std::out_of_range when either endpoint is outside the map.
-    void walkway(std::size_t start_x, std::size_t start_y, std::size_t end_x, std::size_t end_y);
+    /// @throws std::runtime_error when no route between the endpoints exists.
+    void walkway(std::size_t start_x, std::size_t start_y, std::size_t end_x, std::size_t end_y,
+                 const std::vector<RoomSpec>& rooms);
+
+    /// Fills one corner wherever the path touches another path tile diagonally.
+    ///
+    /// This keeps diagonal routes while preventing the two remaining corner
+    /// cells from both staying floor. Only free floor cells outside @p rooms
+    /// are filled.
+    void fill_walkway_corners(const std::vector<RoomSpec>& rooms);
 };
 
 } // namespace dungeon::map

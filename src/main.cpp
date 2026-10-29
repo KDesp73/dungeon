@@ -12,7 +12,7 @@ int main() {
     int width = 0, height = 0;
     dungeon::core::term_size(width, height);
 
-    map.generate(static_cast<std::size_t>(width), static_cast<std::size_t>(height));
+    map.generate(static_cast<std::size_t>(width/2), static_cast<std::size_t>(height/2));
     map.print();
 
     return 0;
