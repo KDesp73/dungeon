@@ -64,6 +64,16 @@ DUNGEON_TEST(map, a_new_map_is_empty)
     CHECK_EQ(map.height(), 0U);
 }
 
+DUNGEON_TEST(map, seed_stays_the_same_for_a_map_instance)
+{
+    Map map;
+    const auto seed = map.seed();
+
+    map.generate();
+
+    CHECK_EQ(map.seed(), seed);
+}
+
 DUNGEON_TEST(map, generate_defaults_to_64_by_32)
 {
     Map map;

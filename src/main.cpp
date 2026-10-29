@@ -8,6 +8,7 @@ int main() {
     std::cout << dungeon::core::kProjectName << ' ' << dungeon::core::kVersion << '\n';
 
     auto map = dungeon::map::Map();
+    std::cout << "Seed: " << map.seed() << '\n';
 
     int width = 0, height = 0;
     dungeon::core::term_size(width, height);

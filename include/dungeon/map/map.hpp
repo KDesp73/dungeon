@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <random>
 #include <vector>
@@ -102,6 +103,13 @@ public:
 
     [[nodiscard]] std::size_t width() const noexcept { return _width; }
     [[nodiscard]] std::size_t height() const noexcept { return _height; }
+
+    /// Seed used to initialise this map's random generator.
+    ///
+    /// Printing this value lets a run be replayed once seeds can be supplied
+    /// to the generator again.
+    [[nodiscard]] std::uint32_t seed() const noexcept { return _seed; }
+
     [[nodiscard]] bool empty() const noexcept { return _tiles.empty(); }
 
     /// Returns the tile at (@p x, @p y).
@@ -123,7 +131,8 @@ private:
     std::size_t _entrance = 0;
     std::size_t _exit     = 0;
     std::vector<Tile> _tiles;
-    std::mt19937 _rng{std::random_device{}()};
+    std::uint32_t _seed = static_cast<std::uint32_t>(std::random_device{}());
+    std::mt19937 _rng{_seed};
 
     struct Door {
         std::size_t x;
