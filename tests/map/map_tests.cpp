@@ -3,11 +3,45 @@
 #include "dungeon/map/map.hpp"
 
 #include <cstdio>
+#include <set>
 #include <stdexcept>
 #include <string>
 
 using dungeon::map::Map;
 using dungeon::map::Tile;
+
+namespace {
+
+std::string snapshot(const Map& map)
+{
+    std::string result;
+    result.reserve(map.width() * map.height());
+
+    for (std::size_t y = 0; y < map.height(); ++y) {
+        for (std::size_t x = 0; x < map.width(); ++x) {
+            result.push_back(dungeon::map::glyph(map.at(x, y)));
+        }
+    }
+
+    return result;
+}
+
+std::size_t count_tiles(const Map& map, Tile tile)
+{
+    std::size_t count = 0;
+
+    for (std::size_t y = 0; y < map.height(); ++y) {
+        for (std::size_t x = 0; x < map.width(); ++x) {
+            if (map.at(x, y) == tile) {
+                ++count;
+            }
+        }
+    }
+
+    return count;
+}
+
+}  // namespace
 
 DUNGEON_TEST(map, a_new_map_is_empty)
 {
@@ -32,33 +66,31 @@ DUNGEON_TEST(map, generate_creates_rooms_with_doors)
     Map map;
     map.generate();
 
-    constexpr std::size_t left_x   = 2;
-    constexpr std::size_t left_y   = 11;
-    constexpr std::size_t right_x  = 46;
-    constexpr std::size_t room_w   = 16;
-    constexpr std::size_t room_h   = 10;
-    constexpr std::size_t room_bot = left_y + room_h - 1;
-    constexpr std::size_t door_y   = left_y + room_h / 2;
+    CHECK(count_tiles(map, Tile::HWall) > 0);
+    CHECK(count_tiles(map, Tile::VWall) > 0);
+    CHECK(count_tiles(map, Tile::Door) >= 2);
+    CHECK(count_tiles(map, Tile::Walkway) > 0);
+    CHECK(count_tiles(map, Tile::Floor) > 0);
+}
 
-    for (std::size_t x = left_x; x < left_x + room_w; ++x) {
-        CHECK(map.at(x, left_y) == Tile::HWall);
-        CHECK(map.at(x, room_bot) == Tile::HWall);
-    }
-    for (std::size_t x = right_x; x < right_x + room_w; ++x) {
-        CHECK(map.at(x, left_y) == Tile::HWall);
-        CHECK(map.at(x, room_bot) == Tile::HWall);
-    }
+DUNGEON_TEST(map, generate_keeps_rooms_inside_the_margin)
+{
+    Map map;
+    map.generate();
 
-    for (std::size_t y = left_y + 1; y < room_bot; ++y) {
-        CHECK(map.at(left_x, y) == Tile::VWall);
-        CHECK(map.at(right_x + room_w - 1, y) == Tile::VWall);
+    for (std::size_t x = 0; x < map.width(); ++x) {
+        for (std::size_t y = 0; y < 2; ++y) {
+            CHECK(map.at(x, y) == Tile::Floor);
+            CHECK(map.at(x, map.height() - 1 - y) == Tile::Floor);
+        }
     }
 
-    CHECK(map.at(left_x + room_w - 1, door_y) == Tile::Door);
-    CHECK(map.at(right_x, door_y) == Tile::Door);
-
-    CHECK(map.at(left_x + 1, left_y + 1) == Tile::Floor);
-    CHECK(map.at(right_x + 1, left_y + 1) == Tile::Floor);
+    for (std::size_t y = 0; y < map.height(); ++y) {
+        for (std::size_t x = 0; x < 2; ++x) {
+            CHECK(map.at(x, y) == Tile::Floor);
+            CHECK(map.at(map.width() - 1 - x, y) == Tile::Floor);
+        }
+    }
 }
 
 DUNGEON_TEST(map, generate_connects_doors_with_a_walkway)
@@ -66,19 +98,59 @@ DUNGEON_TEST(map, generate_connects_doors_with_a_walkway)
     Map map;
     map.generate();
 
-    constexpr std::size_t door_y     = 16;
-    constexpr std::size_t left_door  = 17;
-    constexpr std::size_t right_door = 46;
+    const std::size_t doors = count_tiles(map, Tile::Door);
+    CHECK(doors >= 2);
 
-    CHECK(map.at(left_door, door_y) == Tile::Door);
-    CHECK(map.at(right_door, door_y) == Tile::Door);
+    for (std::size_t y = 0; y < map.height(); ++y) {
+        for (std::size_t x = 0; x < map.width(); ++x) {
+            if (map.at(x, y) != Tile::Door) {
+                continue;
+            }
 
-    for (std::size_t x = left_door + 1; x < right_door; ++x) {
-        CHECK(map.at(x, door_y) == Tile::Walkway);
+            bool touches_walkway = false;
+            const std::size_t min_x = x > 0 ? x - 1 : 0;
+            const std::size_t min_y = y > 0 ? y - 1 : 0;
+            const std::size_t max_x = x + 1 < map.width() ? x + 1 : x;
+            const std::size_t max_y = y + 1 < map.height() ? y + 1 : y;
+
+            for (std::size_t ny = min_y; ny <= max_y; ++ny) {
+                for (std::size_t nx = min_x; nx <= max_x; ++nx) {
+                    if ((nx != x || ny != y) && map.at(nx, ny) == Tile::Walkway) {
+                        touches_walkway = true;
+                    }
+                }
+            }
+
+            CHECK(touches_walkway);
+        }
+    }
+}
+
+DUNGEON_TEST(map, generate_produces_a_different_dungeon_each_call)
+{
+    Map first;
+    Map second;
+
+    first.generate();
+    second.generate();
+
+    CHECK(snapshot(first) != snapshot(second));
+}
+
+DUNGEON_TEST(map, generate_varies_room_layout_and_count)
+{
+    Map map;
+    std::set<std::size_t> door_counts;
+    std::set<std::string> layouts;
+
+    for (int run = 0; run < 30; ++run) {
+        map.generate();
+        door_counts.insert(count_tiles(map, Tile::Door));
+        layouts.insert(snapshot(map));
     }
 
-    CHECK(map.at(left_door - 1, door_y) == Tile::Floor);
-    CHECK(map.at(right_door + 1, door_y) == Tile::Floor);
+    CHECK(door_counts.size() > 1);
+    CHECK(layouts.size() > 1);
 }
 
 DUNGEON_TEST(map, generate_skips_rooms_when_the_map_is_too_small)
@@ -124,12 +196,12 @@ DUNGEON_TEST(map, generate_with_a_zero_dimension_clears_the_map)
 DUNGEON_TEST(map, set_updates_a_tile)
 {
     Map map;
-    map.generate();
+    map.generate(5, 4);
 
-    map.set(20, 20, Tile::Door);
+    map.set(2, 2, Tile::Door);
 
-    CHECK(map.at(20, 20) == Tile::Door);
-    CHECK(map.at(21, 20) == Tile::Floor);
+    CHECK(map.at(2, 2) == Tile::Door);
+    CHECK(map.at(3, 2) == Tile::Floor);
 }
 
 DUNGEON_TEST(map, coordinates_outside_the_map_are_rejected)
@@ -166,7 +238,7 @@ DUNGEON_TEST(map, tiles_have_ascii_glyphs)
     CHECK_EQ(dungeon::map::glyph(Tile::HWall), '-');
     CHECK_EQ(dungeon::map::glyph(Tile::VWall), '|');
     CHECK_EQ(dungeon::map::glyph(Tile::Walkway), '#');
-    CHECK_EQ(dungeon::map::glyph(Tile::Floor), '.');
+    CHECK_EQ(dungeon::map::glyph(Tile::Floor), ' ');
     CHECK_EQ(dungeon::map::glyph(Tile::Player), '@');
     CHECK_EQ(dungeon::map::glyph(Tile::Key), 'K');
     CHECK_EQ(dungeon::map::glyph(Tile::Door), 'D');
@@ -198,5 +270,5 @@ DUNGEON_TEST(map, print_writes_ascii_rows)
     const std::size_t bytes = std::fread(buffer, 1, sizeof(buffer) - 1, file);
     std::fclose(file);
 
-    CHECK_EQ(std::string(buffer, bytes), std::string("-----\n|.@.|\n|.D.|\n-----\n"));
+    CHECK_EQ(std::string(buffer, bytes), std::string("-----\n| @ |\n| D |\n-----\n"));
 }

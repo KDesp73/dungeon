@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <random>
 #include <vector>
 
 namespace dungeon::map {
@@ -28,11 +29,12 @@ class Map {
 public:
     Map() = default;
 
-    /// Builds a map with two rooms connected by a walkway.
+    /// Builds a random dungeon of connected rooms.
     ///
-    /// The rooms and walkway are omitted when the requested dimensions are too
-    /// small to contain them, leaving an open floor map. The map never exceeds
-    /// @p width by @p height.
+    /// The number, positions, and dimensions of the rooms vary on every call.
+    /// If the requested dimensions are too small to contain a valid dungeon,
+    /// the map is left as open floor. The map never exceeds @p width by
+    /// @p height.
     void generate(std::size_t width = 64, std::size_t height = 32);
 
     /// Removes every tile and resets the map to zero width and height.
@@ -64,6 +66,7 @@ private:
     std::size_t _entrance = 0;
     std::size_t _exit     = 0;
     std::vector<Tile> _tiles;
+    std::mt19937 _rng{std::random_device{}()};
 
     enum class DoorSide {
         Top,
@@ -77,17 +80,29 @@ private:
         std::size_t y;
     };
 
+    /// Validates that a room rectangle fits inside the map.
+    ///
+    /// @throws std::invalid_argument when the room is smaller than 3x3.
+    /// @throws std::out_of_range when the room does not fit inside the map.
+    void validate_room(std::size_t x, std::size_t y, std::size_t width,
+                       std::size_t height) const;
+
     /// Draws a rectangular room whose top-left wall is at (@p x, @p y).
     ///
     /// @p width and @p height include the walls, so the interior is
     /// `(width - 2) x (height - 2)` tiles and is filled with `Tile::Floor`.
-    /// A single `Tile::Door` is placed in the middle of @p door_side and its
-    /// position is returned.
+    /// Doors are added separately with `door()`.
     ///
     /// @throws std::invalid_argument when the room is smaller than 3x3.
     /// @throws std::out_of_range when the room does not fit inside the map.
-    [[nodiscard]] Door room(std::size_t x, std::size_t y, std::size_t width, std::size_t height,
-                            DoorSide door_side = DoorSide::Right);
+    void room(std::size_t x, std::size_t y, std::size_t width, std::size_t height);
+
+    /// Places a `Tile::Door` in the middle of @p side and returns its position.
+    ///
+    /// @throws std::invalid_argument when the room is smaller than 3x3.
+    /// @throws std::out_of_range when the room does not fit inside the map.
+    [[nodiscard]] Door door(std::size_t x, std::size_t y, std::size_t width, std::size_t height,
+                            DoorSide side);
 
     /// Carves a straight line of `Tile::Walkway` from one cell to another.
     ///

@@ -1,13 +1,16 @@
 #include "dungeon/map/map.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdlib>
+#include <limits>
+#include <random>
 #include <stdexcept>
 
 namespace dungeon::map {
 
-Map::Door Map::room(std::size_t x, std::size_t y, std::size_t width, std::size_t height,
-                     DoorSide door_side)
+void Map::validate_room(std::size_t x, std::size_t y, std::size_t width,
+                        std::size_t height) const
 {
     if (width < 3 || height < 3) {
         throw std::invalid_argument("Map::room: room must be at least 3x3");
@@ -17,6 +20,11 @@ Map::Door Map::room(std::size_t x, std::size_t y, std::size_t width, std::size_t
         height > _height - y) {
         throw std::out_of_range("Map::room: room does not fit inside the map");
     }
+}
+
+void Map::room(std::size_t x, std::size_t y, std::size_t width, std::size_t height)
+{
+    validate_room(x, y, width, height);
 
     const std::size_t right  = x + width - 1;
     const std::size_t bottom = y + height - 1;
@@ -36,11 +44,20 @@ Map::Door Map::room(std::size_t x, std::size_t y, std::size_t width, std::size_t
         set(x, row, Tile::VWall);
         set(right, row, Tile::VWall);
     }
+}
+
+Map::Door Map::door(std::size_t x, std::size_t y, std::size_t width, std::size_t height,
+                    DoorSide side)
+{
+    validate_room(x, y, width, height);
+
+    const std::size_t right  = x + width - 1;
+    const std::size_t bottom = y + height - 1;
 
     std::size_t door_x = x + width / 2;
     std::size_t door_y = y + height / 2;
 
-    switch (door_side) {
+    switch (side) {
     case DoorSide::Top:
         door_y = y;
         break;
@@ -114,25 +131,130 @@ void Map::generate(std::size_t width, std::size_t height)
     _height = height;
     _tiles.assign(width * height, Tile::Floor);
 
-    constexpr std::size_t room_width  = 16;
-    constexpr std::size_t room_height = 10;
-    constexpr std::size_t margin      = 2;
-    constexpr std::size_t min_gap     = 4;
+    constexpr std::size_t margin          = 2;
+    constexpr std::size_t min_room_width  = 6;
+    constexpr std::size_t max_room_width  = 14;
+    constexpr std::size_t min_room_height = 4;
+    constexpr std::size_t max_room_height = 8;
+    constexpr std::size_t room_padding    = 1;
+    constexpr std::size_t min_rooms       = 2;
+    constexpr std::size_t max_rooms       = 8;
+    constexpr std::size_t placement_tries = 50;
 
-    if (width < room_width * 2 + margin * 2 + min_gap || height < room_height + margin * 2) {
+    if (width < margin * 2 + min_room_width || height < margin * 2 + min_room_height) {
         return;
     }
 
-    const std::size_t room_y  = (height - room_height) / 2;
-    const std::size_t left_x  = margin;
-    const std::size_t right_x = width - room_width - margin;
+    const std::size_t usable_width  = width - margin * 2;
+    const std::size_t usable_height = height - margin * 2;
+    const std::size_t area          = usable_width * usable_height;
 
-    const Door left_door =
-        room(left_x, room_y, room_width, room_height, DoorSide::Right);
-    const Door right_door =
-        room(right_x, room_y, room_width, room_height, DoorSide::Left);
+    const std::size_t capacity =
+        std::max(min_rooms, area / (max_room_width * max_room_height));
+    const std::size_t room_limit = std::min(max_rooms, capacity);
 
-    walkway(left_door.x, left_door.y, right_door.x, right_door.y);
+    std::uniform_int_distribution<std::size_t> room_count_dist(min_rooms, room_limit);
+    const std::size_t target_rooms = room_count_dist(_rng);
+
+    struct RoomSpec {
+        std::size_t x;
+        std::size_t y;
+        std::size_t width;
+        std::size_t height;
+    };
+
+    std::vector<RoomSpec> rooms;
+    rooms.reserve(target_rooms);
+
+    std::uniform_int_distribution<std::size_t> width_dist(
+        min_room_width, std::min(max_room_width, usable_width));
+    std::uniform_int_distribution<std::size_t> height_dist(
+        min_room_height, std::min(max_room_height, usable_height));
+
+    const std::size_t max_attempts = target_rooms * placement_tries;
+
+    for (std::size_t attempt = 0; attempt < max_attempts && rooms.size() < target_rooms;
+         ++attempt) {
+        const std::size_t room_width  = width_dist(_rng);
+        const std::size_t room_height = height_dist(_rng);
+
+        std::uniform_int_distribution<std::size_t> x_dist(margin, width - margin - room_width);
+        std::uniform_int_distribution<std::size_t> y_dist(margin, height - margin - room_height);
+
+        const std::size_t room_x = x_dist(_rng);
+        const std::size_t room_y = y_dist(_rng);
+
+        bool overlaps = false;
+        for (const RoomSpec& other : rooms) {
+            if (room_x < other.x + other.width + room_padding &&
+                room_x + room_width + room_padding > other.x &&
+                room_y < other.y + other.height + room_padding &&
+                room_y + room_height + room_padding > other.y) {
+                overlaps = true;
+                break;
+            }
+        }
+
+        if (!overlaps) {
+            rooms.push_back(RoomSpec{room_x, room_y, room_width, room_height});
+        }
+    }
+
+    if (rooms.size() < min_rooms) {
+        return;
+    }
+
+    for (const RoomSpec& spec : rooms) {
+        room(spec.x, spec.y, spec.width, spec.height);
+    }
+
+    const auto side_facing = [](const RoomSpec& from, const RoomSpec& to) {
+        const std::ptrdiff_t from_x =
+            static_cast<std::ptrdiff_t>(from.x + from.width / 2);
+        const std::ptrdiff_t from_y =
+            static_cast<std::ptrdiff_t>(from.y + from.height / 2);
+        const std::ptrdiff_t to_x = static_cast<std::ptrdiff_t>(to.x + to.width / 2);
+        const std::ptrdiff_t to_y = static_cast<std::ptrdiff_t>(to.y + to.height / 2);
+
+        const std::ptrdiff_t dx = to_x - from_x;
+        const std::ptrdiff_t dy = to_y - from_y;
+
+        if (std::abs(dx) >= std::abs(dy)) {
+            return dx >= 0 ? DoorSide::Right : DoorSide::Left;
+        }
+        return dy >= 0 ? DoorSide::Bottom : DoorSide::Top;
+    };
+
+    const auto center_distance = [](const RoomSpec& a, const RoomSpec& b) {
+        const std::ptrdiff_t ax = static_cast<std::ptrdiff_t>(a.x + a.width / 2);
+        const std::ptrdiff_t ay = static_cast<std::ptrdiff_t>(a.y + a.height / 2);
+        const std::ptrdiff_t bx = static_cast<std::ptrdiff_t>(b.x + b.width / 2);
+        const std::ptrdiff_t by = static_cast<std::ptrdiff_t>(b.y + b.height / 2);
+
+        return static_cast<std::size_t>(std::abs(bx - ax) + std::abs(by - ay));
+    };
+
+    for (std::size_t i = 1; i < rooms.size(); ++i) {
+        std::size_t nearest          = 0;
+        std::size_t nearest_distance = std::numeric_limits<std::size_t>::max();
+
+        for (std::size_t j = 0; j < i; ++j) {
+            const std::size_t distance = center_distance(rooms[i], rooms[j]);
+            if (distance < nearest_distance) {
+                nearest_distance = distance;
+                nearest          = j;
+            }
+        }
+
+        const RoomSpec& from = rooms[i];
+        const RoomSpec& to   = rooms[nearest];
+
+        const Door from_door =
+            door(from.x, from.y, from.width, from.height, side_facing(from, to));
+        const Door to_door = door(to.x, to.y, to.width, to.height, side_facing(to, from));
+
+        walkway(from_door.x, from_door.y, to_door.x, to_door.y);
+    }
 }
 
 } // namespace dungeon::map
