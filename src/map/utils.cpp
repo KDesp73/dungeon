@@ -41,4 +41,5 @@ void Map::print(FILE* fd) const
     }
 }
 
+
 } // namespace dungeon::map

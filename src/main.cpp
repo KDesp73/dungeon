@@ -1,4 +1,5 @@
-#include "dungeon/core/term.hpp"
+#include "dungeon/display/buffer.hpp"
+#include "dungeon/display/term.hpp"
 #include "dungeon/core/version.hpp"
 #include "dungeon/map/map.hpp"
 
@@ -13,13 +14,17 @@ int main() {
     std::cout << "Seed: " << map.seed() << '\n';
 
     int width = 0, height = 0;
-    dungeon::core::term_size(width, height);
+    dungeon::display::tui::term_size(width, height);
 
     map.generate(static_cast<std::size_t>(width/2), static_cast<std::size_t>(height/2));
-    FILE* file = fopen("map.txt", "w");
-    assert(file);
-    map.print(file);
-    fclose(file);
+    // map.print();
+
+    auto buffer = dungeon::display::FrameBuffer();
+
+    bool running = true;
+    while (running) {
+
+    }
 
     return 0;
 }

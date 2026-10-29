@@ -1,6 +1,6 @@
-#include "dungeon/core/term.hpp"
+#include "dungeon/display/term.hpp"
 
-namespace dungeon::core {
+namespace dungeon::display::tui {
 
 void term_size(int& width, int& height)
 {

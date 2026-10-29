@@ -7,7 +7,7 @@
 #include <unistd.h>
 #endif
 
-namespace dungeon::core {
+namespace dungeon::display::tui {
 
 void term_size(int& width, int& height);
 

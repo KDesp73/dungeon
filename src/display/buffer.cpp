@@ -12,7 +12,6 @@ void FrameBuffer::draw(std::size_t x, std::size_t y, char c)
     _back_buffer[y * _width + x] = c;
 }
 
-// Call this at the end of your frame render loop
 void FrameBuffer::present()
 {
     std::swap(_back_buffer, _front_buffer);
