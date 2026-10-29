@@ -2,6 +2,8 @@
 #include "dungeon/core/version.hpp"
 #include "dungeon/map/map.hpp"
 
+#include <cassert>
+#include <cstdio>
 #include <iostream>
 
 int main() {
@@ -14,7 +16,10 @@ int main() {
     dungeon::core::term_size(width, height);
 
     map.generate(static_cast<std::size_t>(width/2), static_cast<std::size_t>(height/2));
-    map.print();
+    FILE* file = fopen("map.txt", "w");
+    assert(file);
+    map.print(file);
+    fclose(file);
 
     return 0;
 }
