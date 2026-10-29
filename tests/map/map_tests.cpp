@@ -462,7 +462,7 @@ DUNGEON_TEST(map, tiles_have_ascii_glyphs)
     CHECK_EQ(dungeon::map::glyph(Tile::Empty), ' ');
     CHECK_EQ(dungeon::map::glyph(Tile::Player), '@');
     CHECK_EQ(dungeon::map::glyph(Tile::Key), 'K');
-    CHECK_EQ(dungeon::map::glyph(Tile::Door), 'D');
+    CHECK_EQ(dungeon::map::glyph(Tile::Door), '+');
 }
 
 DUNGEON_TEST(map, print_writes_ascii_rows)
@@ -491,5 +491,5 @@ DUNGEON_TEST(map, print_writes_ascii_rows)
     const std::size_t bytes = std::fread(buffer, 1, sizeof(buffer) - 1, file);
     std::fclose(file);
 
-    CHECK_EQ(std::string(buffer, bytes), std::string("-----\n| @ |\n| D |\n-----\n"));
+    CHECK_EQ(std::string(buffer, bytes), std::string("-----\n| @ |\n| + |\n-----\n"));
 }
