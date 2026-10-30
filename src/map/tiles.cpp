@@ -20,12 +20,8 @@ char glyph(Tile tile) noexcept
         return '#';
     case Tile::Floor:
         return '.';
-    case Tile::Player:
-        return '@';
     case Tile::Door:
         return '+';
-    case Tile::Key:
-        return 'K';
     }
     return '?';
 }

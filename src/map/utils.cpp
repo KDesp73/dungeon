@@ -42,4 +42,19 @@ void Map::print(FILE* fd) const
 }
 
 
+
+int Map::add(entities::Entity e)
+{
+    int id = e.id();
+    _entities.push_back(std::move(e));
+    return id;
+}
+
+bool Map::remove(int id)
+{
+    return std::erase_if(_entities, [id](const entities::Entity& e) {
+        return e.id() == id;
+    }) > 0;
+}
+
 } // namespace dungeon::map

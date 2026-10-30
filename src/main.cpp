@@ -3,6 +3,7 @@
 #include "dungeon/display/buffer.hpp"
 #include "dungeon/display/term.hpp"
 #include "dungeon/display/ui.hpp"
+#include "dungeon/map/entities.hpp"
 #include "dungeon/map/map.hpp"
 
 #include <chrono>
@@ -37,6 +38,8 @@ int main() {
         layout.game.height > 2 ? layout.game.height - 2 : 0;
 
     map.generate(map_width, map_height);
+
+    map.add(dungeon::map::entities::Player(10, 10));
 
     const auto tick_interval =
         std::chrono::duration_cast<dungeon::core::Ticker::Duration>(

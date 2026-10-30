@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dungeon/map/entities.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -15,8 +16,6 @@ enum class Tile : unsigned char {
     VWall,
     Walkway,
     Floor,
-    Player,
-    Key,
     Door,
 };
 
@@ -125,6 +124,10 @@ public:
     /// Writes the map as ASCII rows to @p fd.
     void print(FILE* fd = stdout) const;
 
+    int add(entities::Entity e);
+    bool remove(int id);
+    [[nodiscard]] std::vector<entities::Entity> entities() const { return _entities; }
+
 private:
     std::size_t _width    = 0;
     std::size_t _height   = 0;
@@ -133,6 +136,8 @@ private:
     std::vector<Tile> _tiles;
     std::uint32_t _seed = static_cast<std::uint32_t>(std::random_device{}());
     std::mt19937 _rng{_seed};
+
+    std::vector<entities::Entity> _entities;
 
     struct Door {
         std::size_t x;

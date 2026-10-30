@@ -1,5 +1,6 @@
 #include "dungeon/display/ui.hpp"
 
+#include "dungeon/map/entities.hpp"
 #include "dungeon/map/map.hpp"
 
 #include <algorithm>
@@ -166,6 +167,10 @@ void draw_map(FrameBuffer& buffer, const dungeon::map::Map& map, const Rect& vie
         for (std::size_t x = 0; x < map_width; ++x) {
             buffer.draw(offset_x + x, offset_y + y, dungeon::map::glyph(map.at(x, y)));
         }
+    }
+
+    for (const auto& e : map.entities() ){
+        buffer.draw(e.x, e.y, e.tile());
     }
 }
 
