@@ -14,14 +14,15 @@ Input, the game loop, entities, and combat are still to come.
 | Area         | State                                                                 |
 | ------------ | --------------------------------------------------------------------- |
 | Build system | CMake presets, strict warnings, ASan/UBSan, CTest, GitHub Actions      |
-| Terminal     | `dungeon::core::term_size()` reads the terminal dimensions            |
+| Terminal     | `dungeon::display::tui::term_size()` reads the terminal dimensions     |
 | Map          | Random rooms, doors, and connected walkways; `MapSpec` replay; seeds   |
-| Rendering    | ASCII output through `Map::print()`; no ANSI colour or framebuffer yet |
-| Tests        | Lightweight harness with `core` and `map` suites                       |
+| Rendering    | Double-buffered character framebuffer; ANSI colour not used yet        |
+| Tests        | Lightweight harness with `core`, `display`, and `map` suites           |
 | Gameplay     | Not started: no game loop, input, player, entities, or combat yet      |
 
-The executable currently prints the project version, the run seed, and a
-generated ASCII dungeon sized to half the terminal.
+The executable currently prints the project version and run seed, then enters a
+60 FPS render loop that draws a placeholder label into a double-buffered
+framebuffer sized to the terminal. The generated map is not drawn yet.
 
 ## Map output
 
@@ -90,14 +91,15 @@ cmake --build build -j
 
 ```sh
 ctest --preset dev --output-on-failure
-./build/dev/tests/dungeon_tests --suite core   # run a single suite
-./build/dev/tests/dungeon_tests --suite map    # run the map tests
-./build/dev/tests/dungeon_tests --list          # list every test case
+./build/dev/tests/dungeon_tests --suite core      # run a single suite
+./build/dev/tests/dungeon_tests --suite display   # run the framebuffer tests
+./build/dev/tests/dungeon_tests --suite map       # run the map tests
+./build/dev/tests/dungeon_tests --list             # list every test case
 ```
 
 Each subdirectory of `tests/` that contains test cases becomes one CTest
-entry; the suite name is the directory name. The current suites are `core`
-and `map`.
+entry; the suite name is the directory name. The current suites are `core`,
+`display`, and `map`.
 
 ## Sanitizers
 
@@ -120,14 +122,17 @@ dungeon/
 ├── cmake/                    build system modules (warnings, sanitizers)
 ├── docs/                     architecture and design notes
 ├── include/dungeon/          public headers, mirrors src/
-│   ├── core/                 terminal size and version
+│   ├── core/                 project version
+│   ├── display/              framebuffer, terminal size, and UI helpers
 │   └── map/                  map generation and tile API
 ├── src/
-│   ├── core/                 terminal and version implementations
-│   ├── map/                  map generation, tiles, and rendering
+│   ├── core/                 version implementation
+│   ├── display/              framebuffer, terminal, and UI implementations
+│   ├── map/                  map generation, tiles, and text output
 │   └── main.cpp              process entry point
 └── tests/
     ├── core/                 core suite
+    ├── display/              display suite
     ├── map/                  map suite
     └── test_harness.*        lightweight test framework
 ```

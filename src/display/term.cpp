@@ -15,7 +15,7 @@ void term_size(int& width, int& height)
     }
 #else
     struct winsize w;
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0) {
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_col > 0 && w.ws_row > 0) {
         width = w.ws_col;
         height = w.ws_row;
     } else {

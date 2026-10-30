@@ -1,6 +1,9 @@
 #include "dungeon/display/buffer.hpp"
+
+#include <algorithm>
 #include <cstddef>
 #include <cstdio>
+#include <utility>
 
 namespace dungeon::display {
 

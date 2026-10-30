@@ -2,6 +2,7 @@ add_executable(dungeon_tests
     test_harness.cpp
     test_main.cpp
     core/version_tests.cpp
+    display/buffer_tests.cpp
     map/map_tests.cpp
 )
 
@@ -14,6 +15,6 @@ dungeon_enable_sanitizers(dungeon_tests)
 # Every directory with tests becomes a CTest entry. The suite name matches the
 # directory name and is passed to the test binary as a filter. Add new suites
 # here as their directory appears.
-foreach(suite IN ITEMS core map)
+foreach(suite IN ITEMS core display map)
     add_test(NAME ${suite} COMMAND dungeon_tests --suite ${suite})
 endforeach()
