@@ -35,5 +35,4 @@ void FrameBuffer::present()
     std::fill(_back_buffer.begin(), _back_buffer.end(), ' ');
 }
 
-}
-
+} // namespace dungeon::display

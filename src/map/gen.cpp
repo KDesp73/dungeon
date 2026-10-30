@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
 #include <cstdlib>
 #include <limits>
 #include <queue>
@@ -383,6 +384,8 @@ void Map::fill_walkway_corners(const std::vector<RoomSpec>& rooms)
     }
 }
 
+// TODO: place entrance, exit and randomized items while generating
+// TODO: Chance class to manage probabilities
 MapSpec Map::make_spec(std::size_t width, std::size_t height)
 {
     MapSpec spec;
@@ -399,11 +402,12 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height)
     constexpr std::size_t min_room_height = 4;
     constexpr std::size_t max_room_height = 8;
     constexpr std::size_t room_padding    = 3;
-    constexpr std::size_t min_rooms       = 2;
-    constexpr std::size_t max_rooms       = 8;
+    constexpr std::size_t min_rooms       = 4;
+    constexpr std::size_t max_rooms       = 10;
     constexpr std::size_t placement_tries = 50;
 
     if (width < margin * 2 + min_room_width || height < margin * 2 + min_room_height) {
+        std::fprintf(stderr, "Map::make_spec: Invalid configuration\n");
         return spec;
     }
 

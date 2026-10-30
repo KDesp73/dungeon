@@ -29,4 +29,4 @@ void term_size(int& width, int& height)
 void hide_cursor() { std::fputs("\033[?25l", stdout); }
 void show_cursor() { std::fputs("\033[?25h", stdout); }
 
-} // namespace dungeon::core
+} // namespace dungeon::display::tui

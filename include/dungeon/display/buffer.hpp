@@ -38,4 +38,4 @@ private:
     std::vector<char> _front_buffer;
 };
 
-}
+} // namespace dungeon::display
