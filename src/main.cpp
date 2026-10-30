@@ -1,14 +1,12 @@
-#include "dungeon/display/buffer.hpp"
-#include "dungeon/display/term.hpp"
 #include "dungeon/core/version.hpp"
+#include "dungeon/display/buffer.hpp"
 #include "dungeon/display/ui.hpp"
 #include "dungeon/map/map.hpp"
 
-#include <cassert>
-#include <cstdio>
+#include <chrono>
+#include <cstddef>
 #include <iostream>
 #include <thread>
-#include <unistd.h>
 
 int main() {
     std::cout << dungeon::core::kProjectName << ' ' << dungeon::core::kVersion << '\n';
@@ -16,28 +14,21 @@ int main() {
     auto map = dungeon::map::Map();
     std::cout << "Seed: " << map.seed() << '\n';
 
-    int width = 0, height = 0;
-    dungeon::display::tui::term_size(width, height);
-
-    map.generate(static_cast<std::size_t>(width/2), static_cast<std::size_t>(height/2));
-    // map.print();
-
     auto buffer = dungeon::display::FrameBuffer();
-    bool running = true;
+    const auto layout =
+        dungeon::display::tui::make_layout(buffer.width(), buffer.height());
 
-    while (running) {
-        // 1. Handle Input (e.g., check keyboard for movement or quit)
-        // running = handle_input();
+    const std::size_t map_width =
+        layout.game.width > 2 ? layout.game.width - 2 : 0;
+    const std::size_t map_height =
+        layout.game.height > 2 ? layout.game.height - 2 : 0;
 
-        // 2. Update Game State (move entities, check collisions)
-        // update_game();
+    map.generate(map_width, map_height);
 
-        dungeon::display::tui::label(buffer, "Hello World", 10, 10);
-
-        // 4. Swap buffers and render to the terminal
+    while (true) {
+        dungeon::display::tui::draw_ui(buffer, map, layout);
         buffer.present();
 
-        // 5. Frame pacing (~60 FPS -> 16ms per frame)
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 

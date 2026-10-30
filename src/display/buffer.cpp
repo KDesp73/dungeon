@@ -25,7 +25,9 @@ void FrameBuffer::present()
     for (std::size_t y = 0; y < _height; ++y) {
         // fwrite prints an entire row efficiently in a single system call
         std::fwrite(&_front_buffer[y * _width], sizeof(char), _width, stdout);
-        std::fputc('\n', stdout);
+        if (y + 1 < _height) {
+            std::fputc('\n', stdout);
+        }
     }
 
     std::fflush(stdout);

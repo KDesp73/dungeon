@@ -6,8 +6,9 @@ terminal, built without a game engine.
 The long-term direction is ANSI-coloured character-cell rendering with a
 simulation kept independent from the presentation layer, so every gameplay
 rule can be unit tested. The current build provides the build and test
-scaffolding, terminal-size detection, and procedural ASCII map generation.
-Input, the game loop, entities, and combat are still to come.
+scaffolding, terminal-size detection, procedural ASCII map generation, and a
+three-panel game UI. Input, the game loop, entities, and combat are still to
+come.
 
 ## Status
 
@@ -16,13 +17,13 @@ Input, the game loop, entities, and combat are still to come.
 | Build system | CMake presets, strict warnings, ASan/UBSan, CTest, GitHub Actions      |
 | Terminal     | `dungeon::display::tui::term_size()` reads the terminal dimensions     |
 | Map          | Random rooms, doors, and connected walkways; `MapSpec` replay; seeds   |
-| Rendering    | Double-buffered character framebuffer; ANSI colour not used yet        |
+| Rendering    | Double-buffered framebuffer with game, stats, and inventory panels    |
 | Tests        | Lightweight harness with `core`, `display`, and `map` suites           |
 | Gameplay     | Not started: no game loop, input, player, entities, or combat yet      |
 
 The executable currently prints the project version and run seed, then enters a
-60 FPS render loop that draws a placeholder label into a double-buffered
-framebuffer sized to the terminal. The generated map is not drawn yet.
+60 FPS render loop that draws the generated map in the left game viewport, a
+stats column on the right, and an inventory bar across the bottom.
 
 ## Map output
 

@@ -3,6 +3,7 @@ add_executable(dungeon_tests
     test_main.cpp
     core/version_tests.cpp
     display/buffer_tests.cpp
+    display/ui_tests.cpp
     map/map_tests.cpp
 )
 
