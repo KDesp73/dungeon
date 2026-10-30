@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dungeon/map/chance.hpp"
 #include "dungeon/map/entities.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -107,7 +108,7 @@ public:
     ///
     /// Printing this value lets a run be replayed once seeds can be supplied
     /// to the generator again.
-    [[nodiscard]] std::uint32_t seed() const noexcept { return _seed; }
+    [[nodiscard]] std::uint32_t seed() const noexcept { return _chance.seed(); }
 
     [[nodiscard]] bool empty() const noexcept { return _tiles.empty(); }
 
@@ -134,8 +135,7 @@ private:
     std::size_t _entrance = 0;
     std::size_t _exit     = 0;
     std::vector<Tile> _tiles;
-    std::uint32_t _seed = static_cast<std::uint32_t>(std::random_device{}());
-    std::mt19937 _rng{_seed};
+    chance::Chance _chance;
 
     std::vector<entities::Entity> _entities;
 

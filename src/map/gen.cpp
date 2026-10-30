@@ -402,7 +402,7 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height)
     constexpr std::size_t min_room_height = 4;
     constexpr std::size_t max_room_height = 8;
     constexpr std::size_t room_padding    = 3;
-    constexpr std::size_t min_rooms       = 4;
+    constexpr std::size_t min_rooms       = 3;
     constexpr std::size_t max_rooms       = 10;
     constexpr std::size_t placement_tries = 50;
 
@@ -419,35 +419,36 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height)
         std::max(min_rooms, area / (max_room_width * max_room_height));
     const std::size_t room_limit = std::min(max_rooms, capacity);
 
-    std::uniform_int_distribution<std::size_t> room_count_dist(min_rooms, room_limit);
-    const std::size_t target_rooms = room_count_dist(_rng);
-
+    const std::size_t target_rooms = _chance.range(min_rooms, room_limit);
     spec.rooms.reserve(target_rooms);
-
-    std::uniform_int_distribution<std::size_t> width_dist(
-        min_room_width, std::min(max_room_width, usable_width));
-    std::uniform_int_distribution<std::size_t> height_dist(
-        min_room_height, std::min(max_room_height, usable_height));
 
     const std::size_t max_attempts = target_rooms * placement_tries;
 
     for (std::size_t attempt = 0; attempt < max_attempts && spec.rooms.size() < target_rooms;
-         ++attempt) {
-        const std::size_t room_width  = width_dist(_rng);
-        const std::size_t room_height = height_dist(_rng);
+            ++attempt) {
 
-        std::uniform_int_distribution<std::size_t> x_dist(margin, width - margin - room_width);
-        std::uniform_int_distribution<std::size_t> y_dist(margin, height - margin - room_height);
+        bool is_big = _chance.roll(_chance.room_big);
 
-        const std::size_t room_x = x_dist(_rng);
-        const std::size_t room_y = y_dist(_rng);
+        std::size_t room_width  = 0;
+        std::size_t room_height = 0;
+
+        if (is_big) {
+            room_width  = _chance.range(std::min(10UL, usable_width), std::min(max_room_width + 4, usable_width));
+            room_height = _chance.range(std::min(6UL, usable_height), std::min(max_room_height + 4, usable_height));
+        } else {
+            room_width  = _chance.range(min_room_width, std::min(max_room_width, usable_width));
+            room_height = _chance.range(min_room_height, std::min(max_room_height, usable_height));
+        }
+
+        const std::size_t room_x = _chance.range(margin, width - margin - room_width);
+        const std::size_t room_y = _chance.range(margin, height - margin - room_height);
 
         bool overlaps = false;
         for (const RoomSpec& other : spec.rooms) {
             if (room_x < other.x + other.width + room_padding &&
-                room_x + room_width + room_padding > other.x &&
-                room_y < other.y + other.height + room_padding &&
-                room_y + room_height + room_padding > other.y) {
+                    room_x + room_width + room_padding > other.x &&
+                    room_y < other.y + other.height + room_padding &&
+                    room_y + room_height + room_padding > other.y) {
                 overlaps = true;
                 break;
             }
