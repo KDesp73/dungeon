@@ -18,8 +18,13 @@ public:
     std::size_t x = 0;
     std::size_t y = 0;
 
-    Entity(char tile, Color color = Color::White, Style style = Style::None)
-        : _tile(tile), _color(color), _style(style), _id(entity_id++) {}
+    Entity(
+        char tile,
+        Color color = Color::White,
+        Style style = Style::None,
+        std::size_t x = 0, std::size_t y = 0)
+        : x(x), y(y),
+        _tile(tile), _color(color), _style(style), _id(entity_id++) {}
 
     virtual ~Entity() = default; // Good practice for polymorphic base classes
 
@@ -63,40 +68,42 @@ private:
 
 class Player : public Entity, public Alive {
 public:
-    Player(std::size_t x, std::size_t y) : Entity('@', Color::White, Style::Bold), Alive(100, 15, 5, 10) {
-        this->x = x;
-        this->y = y;
-    }
+    Player(std::size_t x, std::size_t y)
+        : Entity('@', Color::White, Style::Bold, x, y),
+          Alive(100, 15, 5, 10) {}
 };
 
 class Enemy : public Entity, public Alive {
 public:
-    Enemy(std::size_t x, std::size_t y) : Entity('E', Color::Red, Style::Bold), Alive(50, 8, 2, 5) {
-        this->x = x;
-        this->y = y;
-    }
+    Enemy(std::size_t x, std::size_t y)
+        : Entity('E', Color::Red, Style::Bold, x, y),
+          Alive(50, 8, 2, 5) {}
 };
 
-class Item : public Entity {
+class Item {
 public:
-    Item(char tile, Color color = Color::Yellow, Style style = Style::None)
-        : Entity(tile, color, style) {}
     // TODO: action, pickable / interactable
 };
 
-class Coin : public Item {
+class Coin : public Entity, public Item {
 public:
-    Coin() : Item('$', Color::Yellow, Style::Bold) {}
+    Coin(std::size_t x, std::size_t y)
+        : Entity('$', Color::Yellow, Style::Bold, x, y),
+          Item() {}
 };
 
-class Key : public Item {
+class Key : public Entity, public Item {
 public:
-    Key() : Item('k', Color::Cyan, Style::Bold) {}
+    Key(std::size_t x, std::size_t y)
+        : Entity('k', Color::Cyan, Style::Bold, x, y),
+          Item() {}
 };
 
-class Chest : public Item {
+class Chest : public Entity, public Item {
 public:
-    Chest() : Item('?', Color::Purple, Style::Bold) {}
+    Chest(std::size_t x, std::size_t y)
+        : Entity('?', Color::Purple, Style::Bold, x, y),
+          Item() {}
 };
 
 } // namespace dungeon::map::entities

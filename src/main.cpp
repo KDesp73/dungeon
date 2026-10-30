@@ -40,6 +40,9 @@ int main() {
     map.generate(map_width, map_height);
 
     map.add(dungeon::map::entities::Player(10, 10));
+    map.add(dungeon::map::entities::Enemy(20, 10));
+    map.add(dungeon::map::entities::Coin(30, 40));
+    map.add(dungeon::map::entities::Chest(40, 40));
 
     const auto tick_interval =
         std::chrono::duration_cast<dungeon::core::Ticker::Duration>(
