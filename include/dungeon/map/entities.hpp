@@ -24,7 +24,7 @@ public:
         Style style = Style::None,
         std::size_t x = 0, std::size_t y = 0)
         : x(x), y(y),
-        _tile(tile), _color(color), _style(style), _id(entity_id++) {}
+          _tile(tile), _color(color), _style(style), _id(entity_id++) {}
 
     virtual ~Entity() = default; // Good practice for polymorphic base classes
 
@@ -43,19 +43,19 @@ private:
     int _id;
 };
 
+struct Stats {
+    std::size_t level = 1;
+    int hp = 100;
+    int attack = 10;
+    int defence = 5;
+    int stamina = 10;
+    int gold = 0;
+};
+
 class Alive {
 public:
-    struct Stats {
-        std::size_t level = 1;
-        std::size_t hp = 100;
-        std::size_t attack = 10;
-        std::size_t defence = 5;
-        std::size_t stamina = 10;
-        std::size_t gold = 0;
-    };
-
     Alive(Stats stats) : _stats(stats) {}
-    Alive(std::size_t hp, std::size_t attack, std::size_t defence, std::size_t stamina, std::size_t gold = 0)
+    Alive(int hp, int attack, int defence, int stamina, int gold = 0)
         : _stats{1, hp, attack, defence, stamina, gold} {}
 
     [[nodiscard]] Stats stats() const { return _stats; }
@@ -80,30 +80,58 @@ public:
           Alive(50, 8, 2, 5) {}
 };
 
-class Item {
-public:
-    // TODO: action, pickable / interactable
+enum class ItemType : unsigned char {
+    Equipable, Interactable
 };
 
-class Coin : public Entity, public Item {
+class Item : public Entity {
+public:
+    Item(char tile, Color color, Style style, ItemType type, Stats stats, std::size_t x = 0, std::size_t y = 0)
+        : Entity(tile, color, style, x, y), _stats_diff(stats), _type(type) {}
+
+    Item(char tile, Color color, Style style, ItemType type, int attack, int defence, int stamina, int gold, std::size_t x = 0, std::size_t y = 0)
+        : Entity(tile, color, style, x, y), _stats_diff{0, 0, attack, defence, stamina, gold}, _type(type) {}
+
+    [[nodiscard]] bool equipable() const { return _type == ItemType::Equipable; }
+    [[nodiscard]] bool interactable() const { return _type == ItemType::Interactable; }
+
+    bool equip(Stats& target) {
+        if (!equipable()) return false;
+        target.attack  += _stats_diff.attack;
+        target.defence += _stats_diff.defence;
+        target.stamina += _stats_diff.stamina;
+        target.gold    += _stats_diff.gold;
+        return true;
+    }
+
+    void leave(Stats& target) {
+        target.attack  -= _stats_diff.attack;
+        target.defence -= _stats_diff.defence;
+        target.stamina -= _stats_diff.stamina;
+        target.gold    -= _stats_diff.gold;
+    }
+
+private:
+    Stats _stats_diff;
+    ItemType _type;
+};
+
+class Coin : public Item {
 public:
     Coin(std::size_t x, std::size_t y)
-        : Entity('$', Color::Yellow, Style::Bold, x, y),
-          Item() {}
+        : Item('$', Color::Yellow, Style::Bold, ItemType::Equipable, Stats{.gold = 1}, x, y) {}
 };
 
-class Key : public Entity, public Item {
+class Key : public Item {
 public:
     Key(std::size_t x, std::size_t y)
-        : Entity('k', Color::Cyan, Style::Bold, x, y),
-          Item() {}
+        : Item('k', Color::Cyan, Style::Bold, ItemType::Equipable, Stats{}, x, y) {}
 };
 
-class Chest : public Entity, public Item {
+class Chest : public Item {
 public:
     Chest(std::size_t x, std::size_t y)
-        : Entity('?', Color::Purple, Style::Bold, x, y),
-          Item() {}
+        : Item('?', Color::Purple, Style::Bold, ItemType::Interactable, Stats{}, x, y) {}
 };
 
 } // namespace dungeon::map::entities
