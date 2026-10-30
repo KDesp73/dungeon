@@ -1,3 +1,4 @@
+#include "dungeon/core/ticker.hpp"
 #include "dungeon/core/version.hpp"
 #include "dungeon/display/buffer.hpp"
 #include "dungeon/display/term.hpp"
@@ -37,12 +38,25 @@ int main() {
 
     map.generate(map_width, map_height);
 
+    const auto tick_interval =
+        std::chrono::duration_cast<dungeon::core::Ticker::Duration>(
+            std::chrono::duration<double>(1.0 / 60.0));
+    dungeon::core::Ticker ticker(tick_interval);
+
     dungeon::display::tui::hide_cursor();
     while (g_running) {
+        const std::size_t updates = ticker.advance();
+
+        for (std::size_t i = 0; i < updates; ++i) {
+            // update_game(ticker.interval());
+        }
+
         dungeon::display::tui::draw_ui(buffer, map, layout);
         buffer.present();
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+        if (g_running) {
+            std::this_thread::sleep_until(ticker.next_tick());
+        }
     }
     dungeon::display::tui::show_cursor();
 

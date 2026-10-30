@@ -1,6 +1,7 @@
 add_executable(dungeon_tests
     test_harness.cpp
     test_main.cpp
+    core/ticker_tests.cpp
     core/version_tests.cpp
     display/buffer_tests.cpp
     display/ui_tests.cpp
