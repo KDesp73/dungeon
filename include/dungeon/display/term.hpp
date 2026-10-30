@@ -16,4 +16,5 @@ void term_size(int& width, int& height);
 void hide_cursor();
 void show_cursor();
 
+
 } // namespace dungeon::display::tui

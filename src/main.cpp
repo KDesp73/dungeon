@@ -1,9 +1,9 @@
+#include "dungeon/controls.hpp"
 #include "dungeon/core/ticker.hpp"
 #include "dungeon/core/version.hpp"
 #include "dungeon/display/buffer.hpp"
 #include "dungeon/display/term.hpp"
 #include "dungeon/display/ui.hpp"
-#include "dungeon/map/entities.hpp"
 #include "dungeon/map/map.hpp"
 
 #include <chrono>
@@ -26,8 +26,6 @@ int main() {
     std::cout << dungeon::core::kProjectName << ' ' << dungeon::core::kVersion << '\n';
 
     auto map = dungeon::map::Map();
-    std::cout << "Seed: " << map.seed() << '\n';
-
     auto buffer = dungeon::display::FrameBuffer();
     const auto layout =
         dungeon::display::tui::make_layout(buffer.width(), buffer.height());

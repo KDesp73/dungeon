@@ -1,3 +1,4 @@
+#include "dungeon/map/chance.hpp"
 #include "dungeon/map/map.hpp"
 
 #include <algorithm>
@@ -385,7 +386,6 @@ void Map::fill_walkway_corners(const std::vector<RoomSpec>& rooms)
 }
 
 // TODO: place entrance, exit and randomized items while generating
-// TODO: Chance class to manage probabilities
 MapSpec Map::make_spec(std::size_t width, std::size_t height)
 {
     MapSpec spec;
@@ -427,7 +427,7 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height)
     for (std::size_t attempt = 0; attempt < max_attempts && spec.rooms.size() < target_rooms;
             ++attempt) {
 
-        bool is_big = _chance.roll(_chance.room_big);
+        bool is_big = _chance.roll(chance::ROOM_BIG);
 
         std::size_t room_width  = 0;
         std::size_t room_height = 0;

@@ -4,13 +4,13 @@
 #include <random>
 namespace dungeon::map::chance {
 
+const double COIN = 0.6;
+const double COIN_DOUBLE = 0.3;
+const double CHEST = 0.2;
+const double ROOM_BIG = 0.35;
+
 class Chance {
 public:
-    double coin = 0.6;
-    double coin_double = 0.3;
-    double chest = 0.2;
-    double room_big = 0.35;
-
     Chance() = default;
     explicit Chance(std::uint32_t seed) : _seed(seed), _rng(_seed) {}
 
