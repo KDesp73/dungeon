@@ -1,4 +1,5 @@
 #include "dungeon/display/term.hpp"
+#include <cstdio>
 
 namespace dungeon::display::tui {
 
@@ -24,5 +25,8 @@ void term_size(int& width, int& height)
     }
 #endif
 }
+
+void hide_cursor() { std::fputs("\033[?25l", stdout); }
+void show_cursor() { std::fputs("\033[?25h", stdout); }
 
 } // namespace dungeon::core

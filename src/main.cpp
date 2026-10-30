@@ -1,14 +1,26 @@
 #include "dungeon/core/version.hpp"
 #include "dungeon/display/buffer.hpp"
+#include "dungeon/display/term.hpp"
 #include "dungeon/display/ui.hpp"
 #include "dungeon/map/map.hpp"
 
 #include <chrono>
+#include <csignal>
 #include <cstddef>
 #include <iostream>
 #include <thread>
 
+namespace {
+
+volatile std::sig_atomic_t g_running = 1;
+
+void handle_interrupt(int) { g_running = 0; }
+
+} // namespace
+
 int main() {
+    std::signal(SIGINT, handle_interrupt);
+
     std::cout << dungeon::core::kProjectName << ' ' << dungeon::core::kVersion << '\n';
 
     auto map = dungeon::map::Map();
@@ -25,12 +37,14 @@ int main() {
 
     map.generate(map_width, map_height);
 
-    while (true) {
+    dungeon::display::tui::hide_cursor();
+    while (g_running) {
         dungeon::display::tui::draw_ui(buffer, map, layout);
         buffer.present();
 
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
+    dungeon::display::tui::show_cursor();
 
     return 0;
 }

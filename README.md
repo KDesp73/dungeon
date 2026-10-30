@@ -62,7 +62,8 @@ cmake --preset dev
 cmake --build --preset dev
 ```
 
-The binary is written to `build/dev/dungeon`.
+The binary is written to `build/dev/dungeon`. Run it directly and press
+`Ctrl+C` to quit and restore the terminal cursor.
 
 Available presets:
 
