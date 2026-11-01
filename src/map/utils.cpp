@@ -1,6 +1,8 @@
 #include "dungeon/map/map.hpp"
 
+#include <algorithm>
 #include <stdexcept>
+#include <utility>
 
 namespace dungeon::map {
 
@@ -12,6 +14,7 @@ void Map::clear()
     _exit     = {};
     _tiles.clear();
     _entities.clear();
+    _player = nullptr;
 }
 
 Tile Map::at(std::size_t x, std::size_t y) const
@@ -30,6 +33,26 @@ void Map::set(std::size_t x, std::size_t y, Tile tile)
     _tiles[y * _width + x] = tile;
 }
 
+bool Map::walkable(std::size_t x, std::size_t y) const noexcept
+{
+    if (x >= _width || y >= _height) {
+        return false;
+    }
+
+    switch (_tiles[y * _width + x]) {
+    case Tile::Floor:
+    case Tile::Walkway:
+    case Tile::Door:
+        return true;
+    case Tile::Empty:
+    case Tile::HWall:
+    case Tile::VWall:
+        return false;
+    }
+
+    return false;
+}
+
 void Map::print(FILE* fd) const
 {
     if (fd == nullptr) {
@@ -46,18 +69,53 @@ void Map::print(FILE* fd) const
 
 
 
-int Map::add(entities::Entity e)
+int Map::add(EntityPtr entity)
 {
-    int id = e.id();
-    _entities.push_back(std::move(e));
+    if (!entity) {
+        return 0;
+    }
+
+    const int id = entity->id();
+
+    if (auto* player = dynamic_cast<entities::Player*>(entity.get()); player != nullptr) {
+        _player = player;
+    }
+
+    _entities.push_back(std::move(entity));
     return id;
 }
 
 bool Map::remove(int id)
 {
-    return std::erase_if(_entities, [id](const entities::Entity& e) {
-        return e.id() == id;
-    }) > 0;
+    const auto entity = std::find_if(_entities.begin(), _entities.end(),
+                                     [id](const EntityPtr& candidate) {
+                                         return candidate && candidate->id() == id;
+                                     });
+
+    if (entity == _entities.end()) {
+        return false;
+    }
+
+    if (entity->get() == _player) {
+        _player = nullptr;
+    }
+
+    _entities.erase(entity);
+    return true;
+}
+
+std::vector<entities::Entity> Map::entities() const
+{
+    std::vector<entities::Entity> copies;
+    copies.reserve(_entities.size());
+
+    for (const EntityPtr& entity : _entities) {
+        if (entity) {
+            copies.push_back(*entity);
+        }
+    }
+
+    return copies;
 }
 
 } // namespace dungeon::map

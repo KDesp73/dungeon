@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <vector>
 
 namespace dungeon::map::entities {
 
@@ -66,12 +67,6 @@ private:
     Stats _stats;
 };
 
-class Player : public Entity, public Alive {
-public:
-    Player(std::size_t x, std::size_t y)
-        : Entity('@', Color::White, Style::Bold, x, y),
-          Alive(100, 15, 5, 10) {}
-};
 
 class Enemy : public Entity, public Alive {
 public:
@@ -146,6 +141,20 @@ class Chest : public Item {
 public:
     Chest(std::size_t x, std::size_t y)
         : Item('?', Color::Purple, Style::Bold, ItemType::Interactable, Stats{}, x, y) {}
+};
+
+class Player : public Entity, public Alive {
+public:
+    Player(std::size_t x, std::size_t y)
+        : Entity('@', Color::White, Style::Bold, x, y),
+          Alive(100, 15, 5, 10) {}
+
+    [[nodiscard]] std::vector<Item> inventory() const { return _inventory; }
+    void equip(Item item);
+    void drop(int id);
+
+private:
+    std::vector<Item> _inventory;
 };
 
 } // namespace dungeon::map::entities

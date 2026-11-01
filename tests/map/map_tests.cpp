@@ -637,3 +637,50 @@ DUNGEON_TEST(map, print_writes_ascii_rows)
 
     CHECK_EQ(std::string(buffer, bytes), std::string("-----\n| . |\n| + |\n-----\n"));
 }
+
+DUNGEON_TEST(map, generate_makes_the_player_directly_available)
+{
+    Map map;
+    const MapSpec spec = map.make_spec(80, 40);
+
+    map.generate(spec);
+
+    REQUIRE(map.player() != nullptr);
+    CHECK_EQ(map.player()->x, spec.entrance.x);
+    CHECK_EQ(map.player()->y, spec.entrance.y);
+}
+
+DUNGEON_TEST(map, removing_the_player_clears_the_cached_handle)
+{
+    Map map;
+    const MapSpec spec = map.make_spec(80, 40);
+    map.generate(spec);
+
+    REQUIRE(map.player() != nullptr);
+    const int player_id = map.player()->id();
+
+    CHECK(map.remove(player_id));
+    CHECK(map.player() == nullptr);
+    CHECK(!map.remove(player_id));
+}
+
+DUNGEON_TEST(map, walkable_accepts_floor_walkway_and_doors)
+{
+    Map map;
+    map.generate(5, 4);
+
+    map.set(1, 1, Tile::Floor);
+    map.set(2, 1, Tile::Walkway);
+    map.set(3, 1, Tile::Door);
+    map.set(1, 2, Tile::HWall);
+    map.set(2, 2, Tile::VWall);
+
+    CHECK(map.walkable(1, 1));
+    CHECK(map.walkable(2, 1));
+    CHECK(map.walkable(3, 1));
+    CHECK(!map.walkable(1, 2));
+    CHECK(!map.walkable(2, 2));
+    CHECK(!map.walkable(0, 0));
+    CHECK(!map.walkable(5, 0));
+    CHECK(!map.walkable(0, 4));
+}

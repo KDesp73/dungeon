@@ -4,7 +4,7 @@
 #include "dungeon/display/buffer.hpp"
 #include "dungeon/display/term.hpp"
 #include "dungeon/display/ui.hpp"
-#include "dungeon/map/map.hpp"
+#include "dungeon/game.hpp"
 
 #include <chrono>
 #include <csignal>
@@ -16,7 +16,9 @@ namespace {
 
 volatile std::sig_atomic_t g_running = 1;
 
-void handle_interrupt(int) { g_running = 0; }
+void handle_interrupt(int) {
+    g_running = 0;
+}
 
 } // namespace
 
@@ -25,23 +27,20 @@ int main() {
 
     std::cout << dungeon::core::kProjectName << ' ' << dungeon::core::kVersion << '\n';
 
-    auto map = dungeon::map::Map();
-    auto buffer = dungeon::display::FrameBuffer();
-    const auto layout =
-        dungeon::display::tui::make_layout(buffer.width(), buffer.height());
+    auto       game   = dungeon::game::Game();
+    auto       buffer = dungeon::display::FrameBuffer();
+    const auto layout = dungeon::display::tui::make_layout(buffer.width(), buffer.height());
 
-    const std::size_t map_width =
-        layout.game.width > 2 ? layout.game.width - 2 : 0;
-    const std::size_t map_height =
-        layout.game.height > 2 ? layout.game.height - 2 : 0;
+    const std::size_t map_width  = layout.game.width > 2 ? layout.game.width - 2 : 0;
+    const std::size_t map_height = layout.game.height > 2 ? layout.game.height - 2 : 0;
 
-    map.generate(map_width, map_height);
+    game.generate(map_width, map_height);
 
-    const auto tick_interval =
-        std::chrono::duration_cast<dungeon::core::Ticker::Duration>(
-            std::chrono::duration<double>(1.0 / 60.0));
+    const auto tick_interval = std::chrono::duration_cast<dungeon::core::Ticker::Duration>(
+        std::chrono::duration<double>(1.0 / 60.0));
     dungeon::core::Ticker ticker(tick_interval);
 
+    const dungeon::controls::TerminalSession terminal;
     dungeon::display::tui::hide_cursor();
     while (g_running) {
         const std::size_t updates = ticker.advance();
@@ -50,7 +49,16 @@ int main() {
             // update_game(ticker.interval());
         }
 
-        dungeon::display::tui::draw_ui(buffer, map, layout);
+        const dungeon::controls::KeyEvent key = dungeon::controls::poll_key();
+        if (key.kind == dungeon::controls::KeyKind::Escape) {
+            break;
+        }
+
+        if (const auto direction = dungeon::game::direction_from_key(key)) {
+            static_cast<void>(game.move(*direction));
+        }
+
+        dungeon::display::tui::draw_ui(buffer, game.map(), layout);
         buffer.present();
 
         if (g_running) {

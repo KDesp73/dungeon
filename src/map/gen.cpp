@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
+#include <memory>
 #include <queue>
 #include <random>
 #include <stdexcept>
@@ -14,20 +15,20 @@ namespace dungeon::map {
 
 namespace {
 
-entities::Entity make_item_entity(entities::ItemKind kind, std::size_t x, std::size_t y)
+EntityPtr make_item_entity(entities::ItemKind kind, std::size_t x, std::size_t y)
 {
     switch (kind) {
     case entities::ItemKind::Coin:
-        return entities::Coin{x, y};
+        return std::make_shared<entities::Coin>(x, y);
     case entities::ItemKind::CoinDouble:
-        return entities::CoinDouble{x, y};
+        return std::make_shared<entities::CoinDouble>(x, y);
     case entities::ItemKind::Key:
-        return entities::Key{x, y};
+        return std::make_shared<entities::Key>(x, y);
     case entities::ItemKind::Chest:
-        return entities::Chest{x, y};
+        return std::make_shared<entities::Chest>(x, y);
     }
 
-    return entities::Coin{x, y};
+    return std::make_shared<entities::Coin>(x, y);
 }
 
 } // namespace
@@ -664,7 +665,7 @@ void Map::generate(const MapSpec& spec)
 
     if (is_floor(spec.entrance)) {
         _entrance = spec.entrance;
-        add(entities::Player{spec.entrance.x, spec.entrance.y});
+        add(std::make_shared<entities::Player>(spec.entrance.x, spec.entrance.y));
     }
 
     if (is_floor(spec.exit)) {

@@ -5,10 +5,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <memory>
 #include <random>
 #include <vector>
 
 namespace dungeon::map {
+
+/// Shared handle to an entity stored by a `Map`.
+using EntityPtr = std::shared_ptr<entities::Entity>;
 
 /// Terrain occupying a single map cell.
 enum class Tile : unsigned char {
@@ -145,12 +149,40 @@ public:
     /// @throws std::out_of_range when the coordinates are outside the map.
     void set(std::size_t x, std::size_t y, Tile tile);
 
+    /// Returns true when the player can stand on (@p x, @p y).
+    ///
+    /// Floors, walkways, and doors are walkable. Walls and empty space are not,
+    /// and neither are coordinates outside the map.
+    [[nodiscard]] bool walkable(std::size_t x, std::size_t y) const noexcept;
+
     /// Writes the map as ASCII rows to @p fd.
     void print(FILE* fd = stdout) const;
 
-    int add(entities::Entity e);
+    /// Adds @p entity to the map and returns its id.
+    ///
+    /// The map keeps ownership of the entity. Adding a `Player` also makes it
+    /// available through `player()`.
+    int add(EntityPtr entity);
+
+    /// Removes the entity with @p id and returns whether it was found.
     bool remove(int id);
-    [[nodiscard]] std::vector<entities::Entity> entities() const { return _entities; }
+
+    /// Returns the player placed by the generator, or `nullptr` when there is
+    /// no player. The pointer stays valid until the player is removed or the
+    /// map is cleared or regenerated.
+    [[nodiscard]] entities::Player* player() noexcept { return _player; }
+    [[nodiscard]] const entities::Player* player() const noexcept { return _player; }
+
+    /// Returns the live entities, preserving their concrete types.
+    [[nodiscard]] const std::vector<EntityPtr>& entity_ptrs() const noexcept {
+        return _entities;
+    }
+
+    /// Returns value copies of the entities.
+    ///
+    /// Prefer `entity_ptrs()` when the concrete entity type matters: copying
+    /// through `Entity` slices derived state.
+    [[nodiscard]] std::vector<entities::Entity> entities() const;
 
 private:
     std::size_t _width  = 0;
@@ -160,7 +192,8 @@ private:
     std::vector<Tile> _tiles;
     chance::Chance _chance;
 
-    std::vector<entities::Entity> _entities;
+    std::vector<EntityPtr> _entities;
+    entities::Player*      _player = nullptr;
 
     struct Door {
         std::size_t x;

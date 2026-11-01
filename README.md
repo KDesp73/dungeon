@@ -7,8 +7,8 @@ The long-term direction is ANSI-coloured character-cell rendering with a
 simulation kept independent from the presentation layer, so every gameplay
 rule can be unit tested. The current build provides the build and test
 scaffolding, terminal-size detection, procedural ASCII map generation, a
-three-panel game UI, and a fixed-timestep loop. Input, combat, and enemy AI are
-still to come.
+three-panel game UI, a fixed-timestep loop, WASD player movement, and action
+hooks for items. Combat and enemy AI are still to come.
 
 ## Status
 
@@ -18,13 +18,15 @@ still to come.
 | Terminal     | `dungeon::display::tui::term_size()` reads the terminal dimensions     |
 | Map          | Rooms, doors, walkways, entrance/exit, and random item spawns; replay |
 | Rendering    | Double-buffered framebuffer with game, stats, and inventory panels    |
-| Tests        | Lightweight harness with `core`, `display`, and `map` suites           |
-| Gameplay     | Player spawn and room items; no input, combat, or enemy AI yet         |
+| Tests        | Lightweight harness with `core`, `display`, `game`, and `map` suites  |
+| Gameplay     | WASD/arrow movement, cached player access, and item action hooks       |
 
 The executable currently prints the project version and run seed, then enters a
 fixed-timestep loop that draws the generated map in the left game viewport, a
 stats column on the right, and an inventory bar across the bottom. Simulation
 time advances at 60 ticks per second; rendering is paced to the next tick.
+`W`, `A`, `S`, and `D` or the arrow keys move the player one cell in the
+matching direction. Press `Esc` or `Ctrl+C` to quit.
 
 ## Map output
 
@@ -49,6 +51,25 @@ random item spawns. Each dungeon contains exactly one key, biased away from the
 player's starting room and its neighbours. `Map::generate(const MapSpec&)`
 rebuilds that exact layout and places the player and items without regenerating
 anything randomly.
+
+## Movement and actions
+
+`dungeon::game::Game` owns the map, exposes the player through `Game::player()`
+and `Map::player()`, and moves the player with `Game::move(Direction)`.
+Movement is blocked by walls, empty space, and the map edge; floors, walkways,
+and doors are walkable.
+
+After every completed move the game scans for items and calls the installed
+`ActionHook`:
+
+- `ActionTrigger::Step` fires for each item on the player's new cell.
+- `ActionTrigger::Nearby` fires for each interactable item that is orthogonally
+  one square away. A nearby interactable fires on every move made while it
+  stays in range, so state-changing hooks should be idempotent.
+
+An `ActionEvent` carries the trigger, the item, and the player. Hooks are
+installed with `Game::set_action_hook()`; an empty hook disables action
+dispatch.
 
 ## Requirements
 
@@ -101,13 +122,14 @@ cmake --build build -j
 ctest --preset dev --output-on-failure
 ./build/dev/tests/dungeon_tests --suite core      # run a single suite
 ./build/dev/tests/dungeon_tests --suite display   # run the framebuffer tests
+./build/dev/tests/dungeon_tests --suite game      # run movement and action tests
 ./build/dev/tests/dungeon_tests --suite map       # run the map tests
 ./build/dev/tests/dungeon_tests --list             # list every test case
 ```
 
 Each subdirectory of `tests/` that contains test cases becomes one CTest
 entry; the suite name is the directory name. The current suites are `core`,
-`display`, and `map`.
+`display`, `game`, and `map`.
 
 ## Sanitizers
 
@@ -132,15 +154,18 @@ dungeon/
 ├── include/dungeon/          public headers, mirrors src/
 │   ├── core/                 fixed-timestep ticker and project version
 │   ├── display/              framebuffer, terminal size, and UI helpers
-│   └── map/                  map generation and tile API
+│   ├── map/                  map generation and tile API
+│   └── game.hpp              movement, direction, and action hooks
 ├── src/
 │   ├── core/                 ticker and version implementations
 │   ├── display/              framebuffer, terminal, and UI implementations
 │   ├── map/                  map generation, tiles, and text output
+│   ├── game.cpp              movement and action dispatch
 │   └── main.cpp              process entry point
 └── tests/
     ├── core/                 core suite
     ├── display/              display suite
+    ├── game/                 movement and action suite
     ├── map/                  map suite
     └── test_harness.*        lightweight test framework
 ```

@@ -169,8 +169,10 @@ void draw_map(FrameBuffer& buffer, const dungeon::map::Map& map, const Rect& vie
         }
     }
 
-    for (const auto& e : map.entities() ){
-        buffer.draw(offset_x + e.x, offset_y + e.y, e.tile());
+    for (const auto& entity : map.entity_ptrs()) {
+        if (entity) {
+            buffer.draw(offset_x + entity->x, offset_y + entity->y, entity->tile());
+        }
     }
 }
 
