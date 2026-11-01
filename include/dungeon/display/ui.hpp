@@ -36,7 +36,10 @@ struct Layout {
 [[nodiscard]] Layout make_layout(std::size_t width, std::size_t height);
 
 /// Writes @p text starting at (@p x, @p y).
-void label(FrameBuffer& buffer, std::string_view text, std::size_t x, std::size_t y);
+///
+/// The text is decoded as UTF-8 and each code point is drawn with @p style.
+void label(FrameBuffer& buffer, std::string_view text, std::size_t x, std::size_t y,
+           CellStyle style = {});
 
 /// Draws a single-line border around @p rect.
 void box(FrameBuffer& buffer, const Rect& rect);

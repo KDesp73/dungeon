@@ -41,6 +41,7 @@ class Entity {
     [[nodiscard]] int   id() const { return _id; }
     [[nodiscard]] char  tile() const { return _tile; }
     [[nodiscard]] Color color() const { return _color; }
+    [[nodiscard]] Style style() const { return _style; }
     void                hide() { _visible = false; }
     void                show() { _visible = true; }
     void                place(std::size_t xx, std::size_t yy);

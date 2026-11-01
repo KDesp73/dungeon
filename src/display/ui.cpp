@@ -1,8 +1,10 @@
 #include "dungeon/display/ui.hpp"
 
+#include "dungeon/display/utf8.hpp"
 #include "dungeon/map/map.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -13,8 +15,79 @@ namespace {
 
 constexpr std::size_t kUiGap = 1;
 
+constexpr CellStyle kBorderStyle{Color::BrightBlack, Color::Default, TextStyle::None};
+constexpr CellStyle kTitleStyle{Color::BrightWhite, Color::Default, TextStyle::Bold};
+constexpr CellStyle kExitStyle{Color::BrightGreen, Color::Default, TextStyle::Bold};
+
 constexpr bool has_border(const Rect& rect) noexcept {
     return rect.width >= 2 && rect.height >= 2;
+}
+
+constexpr Color to_color(dungeon::map::entities::Color color) noexcept {
+    using dungeon::map::entities::Color;
+
+    switch (color) {
+    case Color::Red:
+        return dungeon::display::Color::Red;
+    case Color::Blue:
+        return dungeon::display::Color::Blue;
+    case Color::Green:
+        return dungeon::display::Color::Green;
+    case Color::Yellow:
+        return dungeon::display::Color::Yellow;
+    case Color::Grey:
+        return dungeon::display::Color::BrightBlack;
+    case Color::Black:
+        return dungeon::display::Color::Black;
+    case Color::White:
+        return dungeon::display::Color::White;
+    case Color::Cyan:
+        return dungeon::display::Color::Cyan;
+    case Color::Purple:
+        return dungeon::display::Color::Magenta;
+    }
+
+    return dungeon::display::Color::Default;
+}
+
+constexpr TextStyle to_text_style(dungeon::map::entities::Style style) noexcept {
+    using dungeon::map::entities::Style;
+
+    switch (style) {
+    case Style::None:
+        return TextStyle::None;
+    case Style::Underline:
+        return TextStyle::Underline;
+    case Style::Bold:
+        return TextStyle::Bold;
+    case Style::Italic:
+        return TextStyle::Italic;
+    }
+
+    return TextStyle::None;
+}
+
+constexpr CellStyle entity_style(const dungeon::map::entities::Entity& entity) noexcept {
+    return CellStyle{to_color(entity.color()), Color::Default, to_text_style(entity.style())};
+}
+
+constexpr CellStyle tile_style(dungeon::map::Tile tile) noexcept {
+    using dungeon::map::Tile;
+
+    switch (tile) {
+    case Tile::Empty:
+        return CellStyle{};
+    case Tile::HWall:
+    case Tile::VWall:
+    case Tile::Walkway:
+        return CellStyle{Color::BrightBlack, Color::Default, TextStyle::None};
+    case Tile::Floor:
+        return CellStyle{Color::Default, Color::Default, TextStyle::None};
+    case Tile::Door:
+        return CellStyle{Color::Yellow, Color::Default, TextStyle::Bold};
+    }
+
+    return CellStyle{};
 }
 
 void draw_stats(FrameBuffer& buffer, const Rect& rect, std::uint32_t seed,
@@ -61,22 +134,25 @@ void draw_inventory(FrameBuffer& buffer, const Rect& rect,
 
     const std::size_t slot_count = std::min<std::size_t>((rect.width - 4) / 4, 10);
     const auto*       inventory  = player != nullptr ? &player->inventory() : nullptr;
-    std::string       slots;
+
+    const std::size_t y      = rect.y + 2;
+    std::size_t       column = rect.x + 2;
 
     for (std::size_t i = 0; i < slot_count; ++i) {
-        if (!slots.empty()) {
-            slots += ' ';
+        if (i > 0) {
+            ++column;
         }
 
-        const char item =
-            inventory != nullptr && i < inventory->size() ? (*inventory)[i].tile() : ' ';
-        slots += '[';
-        slots += item;
-        slots += ']';
-    }
+        buffer.draw(column++, y, '[');
 
-    if (!slots.empty()) {
-        label(buffer, slots, rect.x + 2, rect.y + 2);
+        if (inventory != nullptr && i < inventory->size()) {
+            const dungeon::map::entities::Item& item = (*inventory)[i];
+            buffer.draw(column++, y, item.tile(), entity_style(item));
+        } else {
+            buffer.draw(column++, y, ' ');
+        }
+
+        buffer.draw(column++, y, ']');
     }
 }
 
@@ -105,9 +181,21 @@ Layout make_layout(std::size_t width, std::size_t height) {
     return layout;
 }
 
-void label(FrameBuffer& buffer, std::string_view text, std::size_t x, std::size_t y) {
-    for (std::size_t i = 0; i < text.size(); ++i) {
-        buffer.draw(x + i, y, text[i]);
+void label(FrameBuffer& buffer, std::string_view text, std::size_t x, std::size_t y,
+           CellStyle style) {
+    std::size_t offset = 0;
+    std::size_t column = 0;
+    char32_t    codepoint = U'\0';
+
+    while (offset < text.size()) {
+        const std::size_t consumed = utf8::decode(text, offset, codepoint);
+        if (consumed == 0) {
+            break;
+        }
+
+        buffer.draw(x + column, y, codepoint, style);
+        offset += consumed;
+        ++column;
     }
 }
 
@@ -119,20 +207,20 @@ void box(FrameBuffer& buffer, const Rect& rect) {
     const std::size_t right  = rect.x + rect.width - 1;
     const std::size_t bottom = rect.y + rect.height - 1;
 
-    for (std::size_t x = rect.x; x <= right; ++x) {
-        buffer.draw(x, rect.y, '-');
-        buffer.draw(x, bottom, '-');
+    for (std::size_t x = rect.x + 1; x < right; ++x) {
+        buffer.draw(x, rect.y, U'─', kBorderStyle);
+        buffer.draw(x, bottom, U'─', kBorderStyle);
     }
 
-    for (std::size_t y = rect.y; y <= bottom; ++y) {
-        buffer.draw(rect.x, y, '|');
-        buffer.draw(right, y, '|');
+    for (std::size_t y = rect.y + 1; y < bottom; ++y) {
+        buffer.draw(rect.x, y, U'│', kBorderStyle);
+        buffer.draw(right, y, U'│', kBorderStyle);
     }
 
-    buffer.draw(rect.x, rect.y, '+');
-    buffer.draw(right, rect.y, '+');
-    buffer.draw(rect.x, bottom, '+');
-    buffer.draw(right, bottom, '+');
+    buffer.draw(rect.x, rect.y, U'┌', kBorderStyle);
+    buffer.draw(right, rect.y, U'┐', kBorderStyle);
+    buffer.draw(rect.x, bottom, U'└', kBorderStyle);
+    buffer.draw(right, bottom, U'┘', kBorderStyle);
 }
 
 void panel(FrameBuffer& buffer, const Rect& rect, std::string_view title) {
@@ -143,7 +231,7 @@ void panel(FrameBuffer& buffer, const Rect& rect, std::string_view title) {
     }
 
     const std::string_view shown = title.substr(0, rect.width - 4);
-    label(buffer, shown, rect.x + 2, rect.y);
+    label(buffer, shown, rect.x + 2, rect.y, kTitleStyle);
 
     const std::size_t title_end = rect.x + 2 + shown.size();
     if (title_end < rect.x + rect.width - 1) {
@@ -166,20 +254,22 @@ void draw_map(FrameBuffer& buffer, const dungeon::map::Map& map, const Rect& vie
 
     for (std::size_t y = 0; y < map_height; ++y) {
         for (std::size_t x = 0; x < map_width; ++x) {
-            buffer.draw(offset_x + x, offset_y + y, dungeon::map::glyph(map.at(x, y)));
+            const dungeon::map::Tile tile = map.at(x, y);
+            buffer.draw(offset_x + x, offset_y + y, dungeon::map::glyph(tile), tile_style(tile));
         }
     }
 
     if (map.exit_unlocked()) {
         const dungeon::map::Point exit = map.exit();
         if (exit.x < map_width && exit.y < map_height) {
-            buffer.draw(offset_x + exit.x, offset_y + exit.y, 'E');
+            buffer.draw(offset_x + exit.x, offset_y + exit.y, 'E', kExitStyle);
         }
     }
 
     for (const auto& entity : map.entity_ptrs()) {
         if (entity) {
-            buffer.draw(offset_x + entity->x, offset_y + entity->y, entity->tile());
+            buffer.draw(offset_x + entity->x, offset_y + entity->y, entity->tile(),
+                        entity_style(*entity));
         }
     }
 }
