@@ -1,5 +1,6 @@
 #include "dungeon/display/ui.hpp"
 
+#include "dungeon/display/style.hpp"
 #include "dungeon/display/utf8.hpp"
 #include "dungeon/map/map.hpp"
 
@@ -79,10 +80,11 @@ constexpr CellStyle tile_style(dungeon::map::Tile tile) noexcept {
         return CellStyle{};
     case Tile::HWall:
     case Tile::VWall:
+        return CellStyle{Color::Default, Color::Default, TextStyle::Bold};
     case Tile::Walkway:
         return CellStyle{Color::BrightBlack, Color::Default, TextStyle::None};
     case Tile::Floor:
-        return CellStyle{Color::Default, Color::Default, TextStyle::None};
+        return CellStyle{Color::BrightBlack, Color::Default, TextStyle::None};
     case Tile::Door:
         return CellStyle{Color::Yellow, Color::Default, TextStyle::Bold};
     }
@@ -252,6 +254,7 @@ void draw_map(FrameBuffer& buffer, const dungeon::map::Map& map, const Rect& vie
     const std::size_t offset_x = viewport.x + 1 + (inner_width - map_width) / 2;
     const std::size_t offset_y = viewport.y + 1 + (inner_height - map_height) / 2;
 
+    // Draw dungeon
     for (std::size_t y = 0; y < map_height; ++y) {
         for (std::size_t x = 0; x < map_width; ++x) {
             const dungeon::map::Tile tile = map.at(x, y);
@@ -259,13 +262,15 @@ void draw_map(FrameBuffer& buffer, const dungeon::map::Map& map, const Rect& vie
         }
     }
 
+    // Draw exit if unlocked
     if (map.exit_unlocked()) {
         const dungeon::map::Point exit = map.exit();
         if (exit.x < map_width && exit.y < map_height) {
-            buffer.draw(offset_x + exit.x, offset_y + exit.y, 'E', kExitStyle);
+            buffer.draw(offset_x + exit.x, offset_y + exit.y, dungeon::map::EXIT_GLYPH, kExitStyle);
         }
     }
 
+    // Draw entities
     for (const auto& entity : map.entity_ptrs()) {
         if (entity) {
             buffer.draw(offset_x + entity->x, offset_y + entity->y, entity->tile(),

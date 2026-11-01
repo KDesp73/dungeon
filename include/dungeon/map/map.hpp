@@ -84,6 +84,8 @@ struct MapSpec {
     std::vector<ItemSpec>       items;
 };
 
+inline const char32_t EXIT_GLYPH = '[';
+
 /// A rectangular tile map.
 ///
 /// Tiles are stored in a single contiguous buffer in row-major order, so a map
