@@ -86,7 +86,9 @@ class Game {
     /// Moves the player one cell in @p direction.
     ///
     /// Returns false when there is no player or the destination is not
-    /// walkable. A successful move dispatches the action hooks.
+    /// walkable. A successful move dispatches the action hooks. Stepping onto
+    /// the unlocked exit generates a new dungeon and carries the player's
+    /// stats and inventory over to it.
     [[nodiscard]] bool move(Direction direction);
 
     /// Replaces the action hook. Passing an empty function disables it.
@@ -100,6 +102,17 @@ class Game {
     [[nodiscard]] const map::entities::Player* player() const noexcept { return _map.player(); }
 
   private:
+    /// Applies the built-in effect of stepping on @p event's item.
+    ///
+    /// Coins are added to the player's gold and keys are equipped into the
+    /// inventory; both are removed from the map. Other items have no default
+    /// effect.
+    void apply_step_action(const ActionEvent& event);
+
+    /// Generates the next dungeon, consumes the key, and carries the player's
+    /// stats and remaining inventory into the new map.
+    void advance_level();
+
     /// Scans the map after a move and calls `_action_hook` for every item the
     /// player stepped on or is standing next to.
     void dispatch_actions();

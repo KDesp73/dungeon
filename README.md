@@ -39,6 +39,7 @@ Generated maps use these glyphs:
 | `#`      | walkway                           |
 | `+`      | door                              |
 | `@`      | player (placed at the entrance)   |
+| `E`      | unlocked exit                     |
 | `$`      | coin                              |
 | `k`      | key                               |
 | `?`      | chest                             |
@@ -67,9 +68,19 @@ After every completed move the game scans for items and calls the installed
   one square away. A nearby interactable fires on every move made while it
   stays in range, so state-changing hooks should be idempotent.
 
+Stepping on a coin adds its value to the player's gold and removes it from the
+map. Stepping on the key equips it into the player inventory and removes it from
+the map; while the key is equipped, the exit is shown as `E` and can be used.
+The stats panel reads the player's live stats, and the inventory bar shows the
+glyph of each equipped item.
+
+Stepping onto the unlocked exit generates a new dungeon at the same size and
+places the player at its entrance. The key is consumed by the exit, while the
+player's stats and remaining inventory are carried over to the new map.
+
 An `ActionEvent` carries the trigger, the item, and the player. Hooks are
 installed with `Game::set_action_hook()`; an empty hook disables action
-dispatch.
+dispatch. Built-in pickup effects still apply when no hook is installed.
 
 ## Requirements
 

@@ -89,7 +89,7 @@ struct MapSpec {
 /// Tiles are stored in a single contiguous buffer in row-major order, so a map
 /// of `width()` columns and `height()` rows contains `width() * height()` tiles.
 class Map {
-public:
+  public:
     Map() = default;
 
     /// Builds a random dungeon.
@@ -131,6 +131,9 @@ public:
     /// Floor cell that ends the dungeon, or `{0, 0}` when no exit exists.
     [[nodiscard]] Point exit() const noexcept { return _exit; }
 
+    /// True when the player carries the key and the exit can be used.
+    [[nodiscard]] bool exit_unlocked() const noexcept;
+
     /// Seed used to initialise this map's random generator.
     ///
     /// Printing this value lets a run be replayed once seeds can be supplied
@@ -170,13 +173,11 @@ public:
     /// Returns the player placed by the generator, or `nullptr` when there is
     /// no player. The pointer stays valid until the player is removed or the
     /// map is cleared or regenerated.
-    [[nodiscard]] entities::Player* player() noexcept { return _player; }
+    [[nodiscard]] entities::Player*       player() noexcept { return _player; }
     [[nodiscard]] const entities::Player* player() const noexcept { return _player; }
 
     /// Returns the live entities, preserving their concrete types.
-    [[nodiscard]] const std::vector<EntityPtr>& entity_ptrs() const noexcept {
-        return _entities;
-    }
+    [[nodiscard]] const std::vector<EntityPtr>& entity_ptrs() const noexcept { return _entities; }
 
     /// Returns value copies of the entities.
     ///
@@ -184,13 +185,14 @@ public:
     /// through `Entity` slices derived state.
     [[nodiscard]] std::vector<entities::Entity> entities() const;
 
-private:
-    std::size_t _width  = 0;
-    std::size_t _height = 0;
-    Point       _entrance;
-    Point       _exit;
+  private:
+    std::size_t       _width  = 0;
+    std::size_t       _height = 0;
+    Point             _entrance;
+    Point             _exit;
+    bool              _has_exit = false;
     std::vector<Tile> _tiles;
-    chance::Chance _chance;
+    chance::Chance    _chance;
 
     std::vector<EntityPtr> _entities;
     entities::Player*      _player = nullptr;
@@ -204,8 +206,7 @@ private:
     ///
     /// @throws std::invalid_argument when the room is smaller than 3x3.
     /// @throws std::out_of_range when the room does not fit inside the map.
-    void validate_room(std::size_t x, std::size_t y, std::size_t width,
-                       std::size_t height) const;
+    void validate_room(std::size_t x, std::size_t y, std::size_t width, std::size_t height) const;
 
     /// Draws a rectangular room whose top-left wall is at (@p x, @p y).
     ///

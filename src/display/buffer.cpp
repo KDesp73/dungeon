@@ -7,8 +7,14 @@
 
 namespace dungeon::display {
 
-void FrameBuffer::draw(std::size_t x, std::size_t y, char c)
-{
+char FrameBuffer::at(std::size_t x, std::size_t y) const noexcept {
+    if (x >= _width || y >= _height) {
+        return ' ';
+    }
+    return _back_buffer[y * _width + x];
+}
+
+void FrameBuffer::draw(std::size_t x, std::size_t y, char c) {
     if (x >= _width || y >= _height) {
         return;
     }
@@ -16,8 +22,7 @@ void FrameBuffer::draw(std::size_t x, std::size_t y, char c)
     _back_buffer[y * _width + x] = c;
 }
 
-void FrameBuffer::present()
-{
+void FrameBuffer::present() {
     std::fputs("\033[H", stdout);
 
     std::swap(_back_buffer, _front_buffer);

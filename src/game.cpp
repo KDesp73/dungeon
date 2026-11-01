@@ -109,12 +109,58 @@ bool Game::move(Direction direction) {
 
     player->place(x, y);
     dispatch_actions();
+
+    auto* current = _map.player();
+    if (current != nullptr && _map.exit_unlocked() && current->x == _map.exit().x &&
+        current->y == _map.exit().y) {
+        advance_level();
+    }
+
     return true;
+}
+
+void Game::advance_level() {
+    const auto* player = _map.player();
+    if (player == nullptr) {
+        return;
+    }
+
+    const std::size_t width     = _map.width();
+    const std::size_t height    = _map.height();
+    const auto        stats     = player->stats();
+    const auto        inventory = player->inventory();
+
+    generate(width, height);
+
+    if (auto* next = _map.player(); next != nullptr) {
+        next->restore(stats, inventory);
+        next->drop(map::entities::ItemKind::Key);
+    }
+}
+
+void Game::apply_step_action(const ActionEvent& event) {
+    if (event.trigger != ActionTrigger::Step) {
+        return;
+    }
+
+    switch (event.item.kind()) {
+    case map::entities::ItemKind::Coin:
+    case map::entities::ItemKind::CoinDouble:
+        static_cast<void>(event.item.equip(event.player.stats()));
+        static_cast<void>(_map.remove(event.item.id()));
+        break;
+    case map::entities::ItemKind::Key:
+        event.player.equip(event.item);
+        static_cast<void>(_map.remove(event.item.id()));
+        break;
+    case map::entities::ItemKind::Chest:
+        break;
+    }
 }
 
 void Game::dispatch_actions() {
     auto* player = _map.player();
-    if (player == nullptr || !_action_hook) {
+    if (player == nullptr) {
         return;
     }
 
@@ -150,7 +196,12 @@ void Game::dispatch_actions() {
             break;
         }
 
-        _action_hook(ActionEvent{action.trigger, *action.item, *current_player});
+        const ActionEvent event{action.trigger, *action.item, *current_player};
+        apply_step_action(event);
+
+        if (_action_hook) {
+            _action_hook(event);
+        }
     }
 }
 

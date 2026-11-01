@@ -93,6 +93,150 @@ DUNGEON_TEST(game, stepping_onto_an_item_triggers_a_step_action) {
     CHECK_EQ(count_actions(actions, ActionTrigger::Step), 1U);
 }
 
+DUNGEON_TEST(game, stepping_on_a_coin_collects_it_and_adds_gold) {
+    MapSpec spec = make_test_spec();
+    spec.items   = {{ItemKind::Coin, 4, 3}};
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+    const auto before = game.player()->stats();
+
+    CHECK(game.move(Direction::Right));
+
+    const auto after = game.player()->stats();
+    CHECK_EQ(after.gold, before.gold + 1);
+    CHECK_EQ(after.level, before.level);
+    CHECK_EQ(after.hp, before.hp);
+    CHECK_EQ(after.attack, before.attack);
+    CHECK_EQ(after.defence, before.defence);
+    CHECK_EQ(after.stamina, before.stamina);
+    CHECK_EQ(game.map().entity_ptrs().size(), 1U);
+}
+
+DUNGEON_TEST(game, stepping_on_a_double_coin_adds_two_gold) {
+    MapSpec spec = make_test_spec();
+    spec.items   = {{ItemKind::CoinDouble, 4, 3}};
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+    const auto before = game.player()->stats();
+
+    CHECK(game.move(Direction::Right));
+
+    const auto after = game.player()->stats();
+    CHECK_EQ(after.gold, before.gold + 2);
+    CHECK_EQ(after.level, before.level);
+    CHECK_EQ(after.hp, before.hp);
+    CHECK_EQ(after.attack, before.attack);
+    CHECK_EQ(after.defence, before.defence);
+    CHECK_EQ(after.stamina, before.stamina);
+    CHECK_EQ(game.map().entity_ptrs().size(), 1U);
+}
+
+DUNGEON_TEST(game, stepping_on_the_key_equips_it_into_the_inventory) {
+    MapSpec spec = make_test_spec();
+    spec.items   = {{ItemKind::Key, 4, 3}};
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+    CHECK(!game.player()->has_key());
+    CHECK(game.player()->inventory().empty());
+    const auto before = game.player()->stats();
+
+    CHECK(game.move(Direction::Right));
+
+    const auto after = game.player()->stats();
+    CHECK_EQ(after.level, before.level);
+    CHECK_EQ(after.hp, before.hp);
+    CHECK_EQ(after.attack, before.attack);
+    CHECK_EQ(after.defence, before.defence);
+    CHECK_EQ(after.stamina, before.stamina);
+    CHECK_EQ(after.gold, before.gold);
+    CHECK(game.player()->has_key());
+    REQUIRE(!game.player()->inventory().empty());
+    CHECK_EQ(game.player()->inventory().front().tile(), 'k');
+    CHECK_EQ(game.map().entity_ptrs().size(), 1U);
+}
+
+DUNGEON_TEST(game, the_exit_unlocks_after_the_key_is_equipped) {
+    MapSpec spec = make_test_spec();
+    spec.items   = {{ItemKind::Key, 4, 3}};
+
+    Game game(spec);
+
+    CHECK(!game.map().exit_unlocked());
+
+    CHECK(game.move(Direction::Right));
+
+    CHECK(game.player()->has_key());
+    CHECK(game.map().exit_unlocked());
+}
+
+DUNGEON_TEST(game, stepping_on_the_unlocked_exit_generates_a_new_map_and_keeps_player_state) {
+    MapSpec spec;
+    spec.width    = 80;
+    spec.height   = 30;
+    spec.rooms    = {{1, 1, 78, 28}};
+    spec.entrance = {3, 3};
+    spec.exit     = {6, 3};
+    spec.items    = {{ItemKind::Key, 4, 3}, {ItemKind::Coin, 5, 3}};
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+
+    CHECK(game.move(Direction::Right)); // key
+    CHECK(game.move(Direction::Right)); // coin
+
+    const auto stats_before     = game.player()->stats();
+    const auto inventory_before = game.player()->inventory();
+    REQUIRE(game.player()->has_key());
+
+    CHECK(game.move(Direction::Right)); // exit
+
+    REQUIRE(game.player() != nullptr);
+    const auto stats_after = game.player()->stats();
+
+    CHECK_EQ(stats_after.level, stats_before.level);
+    CHECK_EQ(stats_after.hp, stats_before.hp);
+    CHECK_EQ(stats_after.attack, stats_before.attack);
+    CHECK_EQ(stats_after.defence, stats_before.defence);
+    CHECK_EQ(stats_after.stamina, stats_before.stamina);
+    CHECK_EQ(stats_after.gold, stats_before.gold);
+
+    CHECK_EQ(game.player()->inventory().size(), inventory_before.size() - 1);
+    CHECK(!game.player()->has_key());
+    CHECK(game.player()->inventory().empty());
+    CHECK(!game.map().exit_unlocked());
+
+    CHECK_EQ(game.player()->x, game.map().entrance().x);
+    CHECK_EQ(game.player()->y, game.map().entrance().y);
+    CHECK_EQ(game.map().width(), 80U);
+    CHECK_EQ(game.map().height(), 30U);
+}
+
+DUNGEON_TEST(game, stepping_on_a_locked_exit_does_not_generate_a_new_map) {
+    MapSpec spec;
+    spec.width    = 40;
+    spec.height   = 20;
+    spec.rooms    = {{1, 1, 38, 18}};
+    spec.entrance = {3, 3};
+    spec.exit     = {6, 3};
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+
+    CHECK(game.move(Direction::Right));
+    CHECK(game.move(Direction::Right));
+    CHECK(game.move(Direction::Right)); // locked exit
+
+    REQUIRE(game.player() != nullptr);
+    CHECK_EQ(game.player()->x, spec.exit.x);
+    CHECK_EQ(game.player()->y, spec.exit.y);
+    CHECK_EQ(game.map().entrance().x, spec.entrance.x);
+    CHECK_EQ(game.map().entrance().y, spec.entrance.y);
+    CHECK(!game.map().exit_unlocked());
+}
+
 DUNGEON_TEST(game, an_interactable_one_square_away_triggers_a_nearby_action) {
     MapSpec spec = make_test_spec();
     spec.items   = {{ItemKind::Chest, 5, 3}};
@@ -123,7 +267,7 @@ DUNGEON_TEST(game, stepping_onto_an_interactable_triggers_only_a_step_action) {
 
 DUNGEON_TEST(game, a_hook_can_remove_the_item_it_receives) {
     MapSpec spec = make_test_spec();
-    spec.items   = {{ItemKind::Coin, 4, 3}};
+    spec.items   = {{ItemKind::Chest, 4, 3}};
 
     Game game(spec);
     game.set_action_hook([&game](const ActionEvent& event) {

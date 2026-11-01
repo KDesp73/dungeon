@@ -15,8 +15,7 @@ namespace dungeon::map {
 
 namespace {
 
-EntityPtr make_item_entity(entities::ItemKind kind, std::size_t x, std::size_t y)
-{
+EntityPtr make_item_entity(entities::ItemKind kind, std::size_t x, std::size_t y) {
     switch (kind) {
     case entities::ItemKind::Coin:
         return std::make_shared<entities::Coin>(x, y);
@@ -33,9 +32,7 @@ EntityPtr make_item_entity(entities::ItemKind kind, std::size_t x, std::size_t y
 
 } // namespace
 
-void Map::validate_room(std::size_t x, std::size_t y, std::size_t width,
-                        std::size_t height) const
-{
+void Map::validate_room(std::size_t x, std::size_t y, std::size_t width, std::size_t height) const {
     if (width < 3 || height < 3) {
         throw std::invalid_argument("Map::room: room must be at least 3x3");
     }
@@ -46,8 +43,7 @@ void Map::validate_room(std::size_t x, std::size_t y, std::size_t width,
     }
 }
 
-void Map::room(std::size_t x, std::size_t y, std::size_t width, std::size_t height)
-{
+void Map::room(std::size_t x, std::size_t y, std::size_t width, std::size_t height) {
     validate_room(x, y, width, height);
 
     const std::size_t right  = x + width - 1;
@@ -71,8 +67,7 @@ void Map::room(std::size_t x, std::size_t y, std::size_t width, std::size_t heig
 }
 
 Map::Door Map::door(std::size_t x, std::size_t y, std::size_t width, std::size_t height,
-                    DoorSide side)
-{
+                    DoorSide side) {
     validate_room(x, y, width, height);
 
     const std::size_t right  = x + width - 1;
@@ -101,17 +96,15 @@ Map::Door Map::door(std::size_t x, std::size_t y, std::size_t width, std::size_t
 }
 
 void Map::walkway(std::size_t start_x, std::size_t start_y, std::size_t end_x, std::size_t end_y,
-                  const std::vector<RoomSpec>& rooms)
-{
-    if (_width == 0 || _height == 0 || start_x >= _width || start_y >= _height ||
-        end_x >= _width || end_y >= _height) {
+                  const std::vector<RoomSpec>& rooms) {
+    if (_width == 0 || _height == 0 || start_x >= _width || start_y >= _height || end_x >= _width ||
+        end_y >= _height) {
         throw std::out_of_range("Map::walkway: endpoint is outside the map");
     }
 
     const auto inside_room = [&rooms](std::size_t x, std::size_t y) {
         for (const RoomSpec& room : rooms) {
-            if (x >= room.x && x < room.x + room.width && y >= room.y &&
-                y < room.y + room.height) {
+            if (x >= room.x && x < room.x + room.width && y >= room.y && y < room.y + room.height) {
                 return true;
             }
         }
@@ -134,8 +127,8 @@ void Map::walkway(std::size_t start_x, std::size_t start_y, std::size_t end_x, s
         const std::ptrdiff_t step_x = x < x1 ? 1 : -1;
         const std::ptrdiff_t step_y = y < y1 ? 1 : -1;
 
-        std::ptrdiff_t error = dx + dy;
-        bool crosses_room     = false;
+        std::ptrdiff_t error        = dx + dy;
+        bool           crosses_room = false;
 
         std::vector<std::size_t> straight;
         straight.reserve(static_cast<std::size_t>(std::max(dx, -dy)) + 1);
@@ -221,8 +214,7 @@ void Map::walkway(std::size_t start_x, std::size_t start_y, std::size_t end_x, s
     };
 
     struct QueueEntryGreater {
-        bool operator()(const QueueEntry& lhs, const QueueEntry& rhs) const
-        {
+        bool operator()(const QueueEntry& lhs, const QueueEntry& rhs) const {
             return lhs.f > rhs.f;
         }
     };
@@ -250,9 +242,9 @@ void Map::walkway(std::size_t start_x, std::size_t start_y, std::size_t end_x, s
         const QueueEntry entry = open.top();
         open.pop();
 
-        const std::size_t state = entry.state;
-        const std::size_t index = state / direction_count;
-        const int direction     = static_cast<int>(state % direction_count);
+        const std::size_t state     = entry.state;
+        const std::size_t index     = state / direction_count;
+        const int         direction = static_cast<int>(state % direction_count);
 
         if (entry.f > best[state] + heuristic(index)) {
             continue;
@@ -284,18 +276,16 @@ void Map::walkway(std::size_t start_x, std::size_t start_y, std::size_t end_x, s
 
             const bool diagonal = offset_x[move] != 0 && offset_y[move] != 0;
             if (diagonal) {
-                const std::size_t side_x =
-                    static_cast<std::size_t>(next_x) + (_width * y);
-                const std::size_t side_y =
-                    static_cast<std::size_t>(next_y) * _width + x;
+                const std::size_t side_x = static_cast<std::size_t>(next_x) + (_width * y);
+                const std::size_t side_y = static_cast<std::size_t>(next_y) * _width + x;
 
                 if (is_blocked(side_x) || is_blocked(side_y)) {
                     continue;
                 }
             }
 
-            const int next_direction = move + 1;
-            std::size_t cost         = best[state] + 1;
+            const int   next_direction = move + 1;
+            std::size_t cost           = best[state] + 1;
 
             if (direction != 0 && direction != next_direction) {
                 cost += turn_cost;
@@ -335,12 +325,10 @@ void Map::walkway(std::size_t start_x, std::size_t start_y, std::size_t end_x, s
     }
 }
 
-void Map::fill_walkway_corners(const std::vector<RoomSpec>& rooms)
-{
+void Map::fill_walkway_corners(const std::vector<RoomSpec>& rooms) {
     const auto inside_room = [&rooms](std::size_t x, std::size_t y) {
         for (const RoomSpec& room : rooms) {
-            if (x >= room.x && x < room.x + room.width && y >= room.y &&
-                y < room.y + room.height) {
+            if (x >= room.x && x < room.x + room.width && y >= room.y && y < room.y + room.height) {
                 return true;
             }
         }
@@ -385,8 +373,7 @@ void Map::fill_walkway_corners(const std::vector<RoomSpec>& rooms)
                             continue;
                         }
 
-                        const bool already_connected =
-                            is_path(next_x, y) || is_path(x, next_y);
+                        const bool already_connected = is_path(next_x, y) || is_path(x, next_y);
 
                         if (already_connected) {
                             continue;
@@ -406,8 +393,7 @@ void Map::fill_walkway_corners(const std::vector<RoomSpec>& rooms)
     }
 }
 
-MapSpec Map::make_spec(std::size_t width, std::size_t height)
-{
+MapSpec Map::make_spec(std::size_t width, std::size_t height) {
     MapSpec spec;
     spec.width  = width;
     spec.height = height;
@@ -435,8 +421,7 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height)
     const std::size_t usable_height = height - margin * 2;
     const std::size_t area          = usable_width * usable_height;
 
-    const std::size_t capacity =
-        std::max(min_rooms, area / (max_room_width * max_room_height));
+    const std::size_t capacity   = std::max(min_rooms, area / (max_room_width * max_room_height));
     const std::size_t room_limit = std::min(max_rooms, capacity);
 
     const std::size_t target_rooms = _chance.range(min_rooms, room_limit);
@@ -445,7 +430,7 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height)
     const std::size_t max_attempts = target_rooms * placement_tries;
 
     for (std::size_t attempt = 0; attempt < max_attempts && spec.rooms.size() < target_rooms;
-            ++attempt) {
+         ++attempt) {
 
         bool is_big = _chance.roll(chance::ROOM_BIG);
 
@@ -453,8 +438,10 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height)
         std::size_t room_height = 0;
 
         if (is_big) {
-            room_width  = _chance.range(std::min(10UL, usable_width), std::min(max_room_width + 4, usable_width));
-            room_height = _chance.range(std::min(6UL, usable_height), std::min(max_room_height + 4, usable_height));
+            room_width  = _chance.range(std::min(10UL, usable_width),
+                                        std::min(max_room_width + 4, usable_width));
+            room_height = _chance.range(std::min(6UL, usable_height),
+                                        std::min(max_room_height + 4, usable_height));
         } else {
             room_width  = _chance.range(min_room_width, std::min(max_room_width, usable_width));
             room_height = _chance.range(min_room_height, std::min(max_room_height, usable_height));
@@ -466,9 +453,9 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height)
         bool overlaps = false;
         for (const RoomSpec& other : spec.rooms) {
             if (room_x < other.x + other.width + room_padding &&
-                    room_x + room_width + room_padding > other.x &&
-                    room_y < other.y + other.height + room_padding &&
-                    room_y + room_height + room_padding > other.y) {
+                room_x + room_width + room_padding > other.x &&
+                room_y < other.y + other.height + room_padding &&
+                room_y + room_height + room_padding > other.y) {
                 overlaps = true;
                 break;
             }
@@ -540,8 +527,7 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height)
             continue;
         }
 
-        const std::size_t distance =
-            center_distance(spec.rooms[entrance_room], spec.rooms[i]);
+        const std::size_t distance = center_distance(spec.rooms[entrance_room], spec.rooms[i]);
         if (distance >= exit_distance) {
             exit_distance = distance;
             exit_room     = i;
@@ -619,8 +605,7 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height)
     return spec;
 }
 
-void Map::generate(const MapSpec& spec)
-{
+void Map::generate(const MapSpec& spec) {
     clear();
 
     if (spec.width == 0 || spec.height == 0) {
@@ -646,9 +631,8 @@ void Map::generate(const MapSpec& spec)
         const RoomSpec& from = spec.rooms[connection.from];
         const RoomSpec& to   = spec.rooms[connection.to];
 
-        const Door from_door =
-            door(from.x, from.y, from.width, from.height, connection.from_side);
-        const Door to_door = door(to.x, to.y, to.width, to.height, connection.to_side);
+        const Door from_door = door(from.x, from.y, from.width, from.height, connection.from_side);
+        const Door to_door   = door(to.x, to.y, to.width, to.height, connection.to_side);
 
         walkway(from_door.x, from_door.y, to_door.x, to_door.y, spec.rooms);
     }
@@ -656,12 +640,12 @@ void Map::generate(const MapSpec& spec)
     fill_walkway_corners(spec.rooms);
 
     const auto is_floor = [this](const Point& point) {
-        return point.x < _width && point.y < _height &&
-               at(point.x, point.y) == Tile::Floor;
+        return point.x < _width && point.y < _height && at(point.x, point.y) == Tile::Floor;
     };
 
     _entrance = {};
     _exit     = {};
+    _has_exit = false;
 
     if (is_floor(spec.entrance)) {
         _entrance = spec.entrance;
@@ -669,7 +653,8 @@ void Map::generate(const MapSpec& spec)
     }
 
     if (is_floor(spec.exit)) {
-        _exit = spec.exit;
+        _exit     = spec.exit;
+        _has_exit = true;
     }
 
     for (const ItemSpec& item : spec.items) {
@@ -679,10 +664,8 @@ void Map::generate(const MapSpec& spec)
     }
 }
 
-void Map::generate(std::size_t width, std::size_t height)
-{
+void Map::generate(std::size_t width, std::size_t height) {
     generate(make_spec(width, height));
 }
 
 } // namespace dungeon::map
-

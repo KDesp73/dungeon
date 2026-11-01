@@ -6,35 +6,32 @@
 
 namespace dungeon::map {
 
-void Map::clear()
-{
+void Map::clear() {
     _width    = 0;
     _height   = 0;
     _entrance = {};
     _exit     = {};
+    _has_exit = false;
     _tiles.clear();
     _entities.clear();
     _player = nullptr;
 }
 
-Tile Map::at(std::size_t x, std::size_t y) const
-{
+Tile Map::at(std::size_t x, std::size_t y) const {
     if (x >= _width || y >= _height) {
         throw std::out_of_range("Map::at: coordinates are outside the map");
     }
     return _tiles.at(y * _width + x);
 }
 
-void Map::set(std::size_t x, std::size_t y, Tile tile)
-{
+void Map::set(std::size_t x, std::size_t y, Tile tile) {
     if (x >= _width || y >= _height) {
         throw std::out_of_range("Map::set: coordinates are outside the map");
     }
     _tiles[y * _width + x] = tile;
 }
 
-bool Map::walkable(std::size_t x, std::size_t y) const noexcept
-{
+bool Map::walkable(std::size_t x, std::size_t y) const noexcept {
     if (x >= _width || y >= _height) {
         return false;
     }
@@ -53,8 +50,11 @@ bool Map::walkable(std::size_t x, std::size_t y) const noexcept
     return false;
 }
 
-void Map::print(FILE* fd) const
-{
+bool Map::exit_unlocked() const noexcept {
+    return _has_exit && _player != nullptr && _player->has_key();
+}
+
+void Map::print(FILE* fd) const {
     if (fd == nullptr) {
         return;
     }
@@ -67,10 +67,7 @@ void Map::print(FILE* fd) const
     }
 }
 
-
-
-int Map::add(EntityPtr entity)
-{
+int Map::add(EntityPtr entity) {
     if (!entity) {
         return 0;
     }
@@ -85,12 +82,11 @@ int Map::add(EntityPtr entity)
     return id;
 }
 
-bool Map::remove(int id)
-{
-    const auto entity = std::find_if(_entities.begin(), _entities.end(),
-                                     [id](const EntityPtr& candidate) {
-                                         return candidate && candidate->id() == id;
-                                     });
+bool Map::remove(int id) {
+    const auto entity =
+        std::find_if(_entities.begin(), _entities.end(), [id](const EntityPtr& candidate) {
+            return candidate && candidate->id() == id;
+        });
 
     if (entity == _entities.end()) {
         return false;
@@ -104,8 +100,7 @@ bool Map::remove(int id)
     return true;
 }
 
-std::vector<entities::Entity> Map::entities() const
-{
+std::vector<entities::Entity> Map::entities() const {
     std::vector<entities::Entity> copies;
     copies.reserve(_entities.size());
 

@@ -1,6 +1,5 @@
 #include "dungeon/display/ui.hpp"
 
-#include "dungeon/map/entities.hpp"
 #include "dungeon/map/map.hpp"
 
 #include <algorithm>
@@ -14,22 +13,24 @@ namespace {
 
 constexpr std::size_t kUiGap = 1;
 
-constexpr bool has_border(const Rect& rect) noexcept
-{
+constexpr bool has_border(const Rect& rect) noexcept {
     return rect.width >= 2 && rect.height >= 2;
 }
 
-void draw_stats(FrameBuffer& buffer, const Rect& rect, std::uint32_t seed)
-{
+void draw_stats(FrameBuffer& buffer, const Rect& rect, std::uint32_t seed,
+                const dungeon::map::entities::Player* player) {
     panel(buffer, rect, "STATS");
 
     if (!has_border(rect) || rect.width <= 4) {
         return;
     }
 
+    const dungeon::map::entities::Stats stats =
+        player != nullptr ? player->stats() : dungeon::map::entities::Stats{};
+
     const std::size_t left   = rect.x + 2;
     const std::size_t bottom = rect.y + rect.height - 1;
-    std::size_t row          = rect.y + 2;
+    std::size_t       row    = rect.y + 2;
 
     const auto line = [&](std::string_view text) {
         if (row >= bottom) {
@@ -39,19 +40,19 @@ void draw_stats(FrameBuffer& buffer, const Rect& rect, std::uint32_t seed)
         ++row;
     };
 
-    line("Level:    1");
-    line("HP:       100/100");
-    line("Stamina:  100/100");
-    line("Attack:   10");
-    line("Defense:  5");
-    line("Gold:     0");
+    line("Level:    " + std::to_string(stats.level));
+    line("HP:       " + std::to_string(stats.hp));
+    line("Stamina:  " + std::to_string(stats.stamina));
+    line("Attack:   " + std::to_string(stats.attack));
+    line("Defense:  " + std::to_string(stats.defence));
+    line("Gold:     " + std::to_string(stats.gold));
     ++row;
     line("Seed:");
     line(std::to_string(seed));
 }
 
-void draw_inventory(FrameBuffer& buffer, const Rect& rect)
-{
+void draw_inventory(FrameBuffer& buffer, const Rect& rect,
+                    const dungeon::map::entities::Player* player) {
     panel(buffer, rect, "INVENTORY");
 
     if (!has_border(rect) || rect.width <= 4) {
@@ -59,13 +60,19 @@ void draw_inventory(FrameBuffer& buffer, const Rect& rect)
     }
 
     const std::size_t slot_count = std::min<std::size_t>((rect.width - 4) / 4, 10);
+    const auto*       inventory  = player != nullptr ? &player->inventory() : nullptr;
     std::string       slots;
 
     for (std::size_t i = 0; i < slot_count; ++i) {
         if (!slots.empty()) {
             slots += ' ';
         }
-        slots += "[ ]";
+
+        const char item =
+            inventory != nullptr && i < inventory->size() ? (*inventory)[i].tile() : ' ';
+        slots += '[';
+        slots += item;
+        slots += ']';
     }
 
     if (!slots.empty()) {
@@ -75,8 +82,7 @@ void draw_inventory(FrameBuffer& buffer, const Rect& rect)
 
 } // namespace
 
-Layout make_layout(std::size_t width, std::size_t height)
-{
+Layout make_layout(std::size_t width, std::size_t height) {
     Layout layout;
 
     constexpr std::size_t min_width  = 40;
@@ -86,9 +92,8 @@ Layout make_layout(std::size_t width, std::size_t height)
         return layout;
     }
 
-    const std::size_t stats_width = std::clamp(width / 4, std::size_t{20}, std::size_t{28});
-    const std::size_t inventory_height =
-        std::clamp(height / 8, std::size_t{5}, std::size_t{7});
+    const std::size_t stats_width      = std::clamp(width / 4, std::size_t{20}, std::size_t{28});
+    const std::size_t inventory_height = std::clamp(height / 8, std::size_t{5}, std::size_t{7});
 
     const std::size_t game_width  = width - stats_width - kUiGap;
     const std::size_t game_height = height - inventory_height - kUiGap;
@@ -100,15 +105,13 @@ Layout make_layout(std::size_t width, std::size_t height)
     return layout;
 }
 
-void label(FrameBuffer& buffer, std::string_view text, std::size_t x, std::size_t y)
-{
+void label(FrameBuffer& buffer, std::string_view text, std::size_t x, std::size_t y) {
     for (std::size_t i = 0; i < text.size(); ++i) {
         buffer.draw(x + i, y, text[i]);
     }
 }
 
-void box(FrameBuffer& buffer, const Rect& rect)
-{
+void box(FrameBuffer& buffer, const Rect& rect) {
     if (!has_border(rect)) {
         return;
     }
@@ -132,8 +135,7 @@ void box(FrameBuffer& buffer, const Rect& rect)
     buffer.draw(right, bottom, '+');
 }
 
-void panel(FrameBuffer& buffer, const Rect& rect, std::string_view title)
-{
+void panel(FrameBuffer& buffer, const Rect& rect, std::string_view title) {
     box(buffer, rect);
 
     if (!has_border(rect) || title.empty() || rect.width <= 4) {
@@ -149,8 +151,7 @@ void panel(FrameBuffer& buffer, const Rect& rect, std::string_view title)
     }
 }
 
-void draw_map(FrameBuffer& buffer, const dungeon::map::Map& map, const Rect& viewport)
-{
+void draw_map(FrameBuffer& buffer, const dungeon::map::Map& map, const Rect& viewport) {
     if (!has_border(viewport) || map.empty()) {
         return;
     }
@@ -169,6 +170,13 @@ void draw_map(FrameBuffer& buffer, const dungeon::map::Map& map, const Rect& vie
         }
     }
 
+    if (map.exit_unlocked()) {
+        const dungeon::map::Point exit = map.exit();
+        if (exit.x < map_width && exit.y < map_height) {
+            buffer.draw(offset_x + exit.x, offset_y + exit.y, 'E');
+        }
+    }
+
     for (const auto& entity : map.entity_ptrs()) {
         if (entity) {
             buffer.draw(offset_x + entity->x, offset_y + entity->y, entity->tile());
@@ -176,17 +184,15 @@ void draw_map(FrameBuffer& buffer, const dungeon::map::Map& map, const Rect& vie
     }
 }
 
-void draw_ui(FrameBuffer& buffer, const dungeon::map::Map& map, const Layout& layout)
-{
+void draw_ui(FrameBuffer& buffer, const dungeon::map::Map& map, const Layout& layout) {
     panel(buffer, layout.game, "DUNGEON");
     draw_map(buffer, map, layout.game);
 
-    draw_stats(buffer, layout.stats, map.seed());
-    draw_inventory(buffer, layout.inventory);
+    draw_stats(buffer, layout.stats, map.seed(), map.player());
+    draw_inventory(buffer, layout.inventory, map.player());
 }
 
-void draw_ui(FrameBuffer& buffer, const dungeon::map::Map& map)
-{
+void draw_ui(FrameBuffer& buffer, const dungeon::map::Map& map) {
     draw_ui(buffer, map, make_layout(buffer.width(), buffer.height()));
 }
 
