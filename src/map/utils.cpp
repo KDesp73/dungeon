@@ -6,9 +6,12 @@ namespace dungeon::map {
 
 void Map::clear()
 {
-    _width  = 0;
-    _height = 0;
+    _width    = 0;
+    _height   = 0;
+    _entrance = {};
+    _exit     = {};
     _tiles.clear();
+    _entities.clear();
 }
 
 Tile Map::at(std::size_t x, std::size_t y) const

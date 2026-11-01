@@ -12,6 +12,26 @@
 
 namespace dungeon::map {
 
+namespace {
+
+entities::Entity make_item_entity(entities::ItemKind kind, std::size_t x, std::size_t y)
+{
+    switch (kind) {
+    case entities::ItemKind::Coin:
+        return entities::Coin{x, y};
+    case entities::ItemKind::CoinDouble:
+        return entities::CoinDouble{x, y};
+    case entities::ItemKind::Key:
+        return entities::Key{x, y};
+    case entities::ItemKind::Chest:
+        return entities::Chest{x, y};
+    }
+
+    return entities::Coin{x, y};
+}
+
+} // namespace
+
 void Map::validate_room(std::size_t x, std::size_t y, std::size_t width,
                         std::size_t height) const
 {
@@ -385,7 +405,6 @@ void Map::fill_walkway_corners(const std::vector<RoomSpec>& rooms)
     }
 }
 
-// TODO: place entrance, exit and randomized items while generating
 MapSpec Map::make_spec(std::size_t width, std::size_t height)
 {
     MapSpec spec;
@@ -507,6 +526,95 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height)
             ConnectionSpec{i, nearest, side_facing(from, to), side_facing(to, from)});
     }
 
+    const auto room_center = [](const RoomSpec& room) {
+        return Point{room.x + room.width / 2, room.y + room.height / 2};
+    };
+
+    const std::size_t entrance_room = _chance.range(0, spec.rooms.size() - 1);
+    std::size_t       exit_room     = entrance_room;
+    std::size_t       exit_distance = 0;
+
+    for (std::size_t i = 0; i < spec.rooms.size(); ++i) {
+        if (i == entrance_room) {
+            continue;
+        }
+
+        const std::size_t distance =
+            center_distance(spec.rooms[entrance_room], spec.rooms[i]);
+        if (distance >= exit_distance) {
+            exit_distance = distance;
+            exit_room     = i;
+        }
+    }
+
+    spec.entrance = room_center(spec.rooms[entrance_room]);
+    spec.exit     = room_center(spec.rooms[exit_room]);
+
+    const auto adjacent_to_entrance = [&spec, entrance_room](std::size_t room) {
+        for (const ConnectionSpec& connection : spec.connections) {
+            if ((connection.from == entrance_room && connection.to == room) ||
+                (connection.to == entrance_room && connection.from == room)) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    std::vector<double> key_weights(spec.rooms.size(), chance::KEY_DISTANT_ROOM_WEIGHT);
+    for (std::size_t i = 0; i < spec.rooms.size(); ++i) {
+        if (i == entrance_room) {
+            key_weights[i] = chance::KEY_SAME_ROOM_WEIGHT;
+        } else if (adjacent_to_entrance(i)) {
+            key_weights[i] = chance::KEY_ADJACENT_ROOM_WEIGHT;
+        }
+    }
+
+    const std::size_t key_room = _chance.weighted(key_weights);
+
+    for (std::size_t room_index = 0; room_index < spec.rooms.size(); ++room_index) {
+        const RoomSpec&    room = spec.rooms[room_index];
+        std::vector<Point> free_cells;
+
+        for (std::size_t y = room.y + 1; y < room.y + room.height - 1; ++y) {
+            for (std::size_t x = room.x + 1; x < room.x + room.width - 1; ++x) {
+                if ((x == spec.entrance.x && y == spec.entrance.y) ||
+                    (x == spec.exit.x && y == spec.exit.y)) {
+                    continue;
+                }
+                free_cells.push_back(Point{x, y});
+            }
+        }
+
+        if (room_index == key_room) {
+            Point cell = room_center(room);
+
+            if (!free_cells.empty()) {
+                const std::size_t index = _chance.range(0, free_cells.size() - 1);
+                cell                    = free_cells[index];
+                free_cells[index]       = free_cells.back();
+                free_cells.pop_back();
+            }
+
+            spec.items.push_back(ItemSpec{entities::ItemKind::Key, cell.x, cell.y});
+        }
+
+        for (const chance::ItemSpawn& spawn : chance::ITEM_SPAWNS) {
+            if (free_cells.empty()) {
+                break;
+            }
+            if (!_chance.roll(spawn.probability)) {
+                continue;
+            }
+
+            const std::size_t index = _chance.range(0, free_cells.size() - 1);
+            const Point       cell  = free_cells[index];
+
+            spec.items.push_back(ItemSpec{spawn.kind, cell.x, cell.y});
+            free_cells[index] = free_cells.back();
+            free_cells.pop_back();
+        }
+    }
+
     return spec;
 }
 
@@ -545,6 +653,29 @@ void Map::generate(const MapSpec& spec)
     }
 
     fill_walkway_corners(spec.rooms);
+
+    const auto is_floor = [this](const Point& point) {
+        return point.x < _width && point.y < _height &&
+               at(point.x, point.y) == Tile::Floor;
+    };
+
+    _entrance = {};
+    _exit     = {};
+
+    if (is_floor(spec.entrance)) {
+        _entrance = spec.entrance;
+        add(entities::Player{spec.entrance.x, spec.entrance.y});
+    }
+
+    if (is_floor(spec.exit)) {
+        _exit = spec.exit;
+    }
+
+    for (const ItemSpec& item : spec.items) {
+        if (item.x < _width && item.y < _height && at(item.x, item.y) == Tile::Floor) {
+            add(make_item_entity(item.kind, item.x, item.y));
+        }
+    }
 }
 
 void Map::generate(std::size_t width, std::size_t height)

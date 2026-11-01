@@ -7,7 +7,7 @@ The long-term direction is ANSI-coloured character-cell rendering with a
 simulation kept independent from the presentation layer, so every gameplay
 rule can be unit tested. The current build provides the build and test
 scaffolding, terminal-size detection, procedural ASCII map generation, a
-three-panel game UI, and a fixed-timestep loop. Input, entities, and combat are
+three-panel game UI, and a fixed-timestep loop. Input, combat, and enemy AI are
 still to come.
 
 ## Status
@@ -16,10 +16,10 @@ still to come.
 | ------------ | --------------------------------------------------------------------- |
 | Build system | CMake presets, strict warnings, ASan/UBSan, CTest, GitHub Actions      |
 | Terminal     | `dungeon::display::tui::term_size()` reads the terminal dimensions     |
-| Map          | Random rooms, doors, and connected walkways; `MapSpec` replay; seeds   |
+| Map          | Rooms, doors, walkways, entrance/exit, and random item spawns; replay |
 | Rendering    | Double-buffered framebuffer with game, stats, and inventory panels    |
 | Tests        | Lightweight harness with `core`, `display`, and `map` suites           |
-| Gameplay     | No input, player, entities, or combat yet; 60 Hz tick loop is running   |
+| Gameplay     | Player spawn and room items; no input, combat, or enemy AI yet         |
 
 The executable currently prints the project version and run seed, then enters a
 fixed-timestep loop that draws the generated map in the left game viewport, a
@@ -36,14 +36,19 @@ Generated maps use these glyphs:
 | `.`      | room floor                        |
 | `#`      | walkway                           |
 | `+`      | door                              |
-| `@`      | player (reserved, not placed yet) |
-| `K`      | key (reserved, not placed yet)    |
+| `@`      | player (placed at the entrance)   |
+| `$`      | coin                              |
+| `k`      | key                               |
+| `?`      | chest                             |
 | space    | empty space outside rooms         |
 
 Every map has a seed exposed through `Map::seed()`; the executable prints it so
 a run can later be replayed once seed input is supported. `Map::make_spec()`
-returns a `MapSpec`, and `Map::generate(const MapSpec&)` rebuilds that exact
-layout without regenerating anything randomly.
+returns a `MapSpec` containing the rooms, connections, entrance, exit, and
+random item spawns. Each dungeon contains exactly one key, biased away from the
+player's starting room and its neighbours. `Map::generate(const MapSpec&)`
+rebuilds that exact layout and places the player and items without regenerating
+anything randomly.
 
 ## Requirements
 

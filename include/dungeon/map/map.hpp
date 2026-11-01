@@ -31,6 +31,12 @@ enum class DoorSide : unsigned char {
     Left,
 };
 
+/// A cell coordinate inside a `MapSpec`.
+struct Point {
+    std::size_t x = 0;
+    std::size_t y = 0;
+};
+
 /// Position and size of one room inside a `MapSpec`.
 ///
 /// `width` and `height` include the walls, so a room of `6 x 5` has a
@@ -53,15 +59,25 @@ struct ConnectionSpec {
     DoorSide    to_side   = DoorSide::Left;
 };
 
+/// One item the generator places inside a room.
+struct ItemSpec {
+    entities::ItemKind kind = entities::ItemKind::Coin;
+    std::size_t        x    = 0;
+    std::size_t        y    = 0;
+};
+
 /// Complete description of a generated dungeon.
 ///
 /// Create one with `Map::make_spec()` and pass it to
 /// `Map::generate(const MapSpec&)` to rebuild the exact same map.
 struct MapSpec {
-    std::size_t                width  = 0;
-    std::size_t                height = 0;
+    std::size_t                 width  = 0;
+    std::size_t                 height = 0;
     std::vector<RoomSpec>       rooms;
     std::vector<ConnectionSpec> connections;
+    Point                       entrance;
+    Point                       exit;
+    std::vector<ItemSpec>       items;
 };
 
 /// A rectangular tile map.
@@ -92,7 +108,8 @@ public:
 
     /// Creates a random dungeon layout without changing the map.
     ///
-    /// Pass the result to `generate(const MapSpec&)` to build it.
+    /// The spec includes an entrance, a distant exit, and the items rolled for
+    /// each room. Pass the result to `generate(const MapSpec&)` to build it.
     [[nodiscard]] MapSpec make_spec(std::size_t width = 64, std::size_t height = 32);
 
     /// Removes every tile and resets the map to zero width and height.
@@ -103,6 +120,12 @@ public:
 
     [[nodiscard]] std::size_t width() const noexcept { return _width; }
     [[nodiscard]] std::size_t height() const noexcept { return _height; }
+
+    /// Floor cell where the player starts, or `{0, 0}` when no entrance exists.
+    [[nodiscard]] Point entrance() const noexcept { return _entrance; }
+
+    /// Floor cell that ends the dungeon, or `{0, 0}` when no exit exists.
+    [[nodiscard]] Point exit() const noexcept { return _exit; }
 
     /// Seed used to initialise this map's random generator.
     ///
@@ -130,10 +153,10 @@ public:
     [[nodiscard]] std::vector<entities::Entity> entities() const { return _entities; }
 
 private:
-    std::size_t _width    = 0;
-    std::size_t _height   = 0;
-    std::size_t _entrance = 0;
-    std::size_t _exit     = 0;
+    std::size_t _width  = 0;
+    std::size_t _height = 0;
+    Point       _entrance;
+    Point       _exit;
     std::vector<Tile> _tiles;
     chance::Chance _chance;
 

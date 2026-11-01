@@ -6,11 +6,13 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 using dungeon::map::DoorSide;
 using dungeon::map::Map;
 using dungeon::map::MapSpec;
 using dungeon::map::Tile;
+using dungeon::map::entities::ItemKind;
 
 namespace {
 
@@ -52,6 +54,30 @@ bool inside_room(const dungeon::map::RoomSpec& room, std::size_t x, std::size_t 
 bool is_path(Tile tile)
 {
     return tile == Tile::Walkway || tile == Tile::Door;
+}
+
+bool has_entity_at(const Map& map, char tile, std::size_t x, std::size_t y)
+{
+    for (const dungeon::map::entities::Entity& entity : map.entities()) {
+        if (entity.tile() == tile && entity.x == x && entity.y == y) {
+            return true;
+        }
+    }
+    return false;
+}
+
+char item_glyph(ItemKind kind)
+{
+    switch (kind) {
+    case ItemKind::Coin:
+    case ItemKind::CoinDouble:
+        return '$';
+    case ItemKind::Key:
+        return 'k';
+    case ItemKind::Chest:
+        return '?';
+    }
+    return '?';
 }
 
 }  // namespace
@@ -313,6 +339,126 @@ DUNGEON_TEST(map, make_spec_describes_the_generated_dungeon)
         CHECK(connection.from < spec.rooms.size());
         CHECK(connection.to < spec.rooms.size());
     }
+}
+
+DUNGEON_TEST(map, make_spec_places_entrance_and_exit_inside_rooms)
+{
+    Map map;
+
+    for (int run = 0; run < 30; ++run) {
+        const MapSpec spec = map.make_spec();
+        REQUIRE(!spec.rooms.empty());
+
+        bool entrance_in_room = false;
+        bool exit_in_room     = false;
+
+        for (const dungeon::map::RoomSpec& room : spec.rooms) {
+            entrance_in_room =
+                entrance_in_room || inside_room(room, spec.entrance.x, spec.entrance.y);
+            exit_in_room = exit_in_room || inside_room(room, spec.exit.x, spec.exit.y);
+        }
+
+        CHECK(entrance_in_room);
+        CHECK(exit_in_room);
+        CHECK(!(spec.entrance.x == spec.exit.x && spec.entrance.y == spec.exit.y));
+    }
+}
+
+DUNGEON_TEST(map, generate_places_the_player_at_the_entrance)
+{
+    Map map;
+    const MapSpec spec = map.make_spec(80, 40);
+
+    map.generate(spec);
+
+    CHECK(map.at(spec.entrance.x, spec.entrance.y) == Tile::Floor);
+    CHECK(has_entity_at(map, '@', spec.entrance.x, spec.entrance.y));
+    CHECK_EQ(map.entrance().x, spec.entrance.x);
+    CHECK_EQ(map.entrance().y, spec.entrance.y);
+    CHECK_EQ(map.exit().x, spec.exit.x);
+    CHECK_EQ(map.exit().y, spec.exit.y);
+}
+
+DUNGEON_TEST(map, make_spec_spawns_items_inside_rooms)
+{
+    Map map;
+    std::size_t total_items = 0;
+
+    for (int run = 0; run < 30; ++run) {
+        const MapSpec spec = map.make_spec();
+        std::set<std::pair<std::size_t, std::size_t>> occupied;
+
+        for (const dungeon::map::ItemSpec& item : spec.items) {
+            ++total_items;
+
+            bool inside = false;
+            for (const dungeon::map::RoomSpec& room : spec.rooms) {
+                inside = inside || inside_room(room, item.x, item.y);
+            }
+
+            CHECK(inside);
+            CHECK(!(item.x == spec.entrance.x && item.y == spec.entrance.y));
+            CHECK(!(item.x == spec.exit.x && item.y == spec.exit.y));
+            CHECK(occupied.insert({item.x, item.y}).second);
+        }
+    }
+
+    CHECK(total_items > 0);
+}
+
+DUNGEON_TEST(map, make_spec_places_exactly_one_key)
+{
+    Map map;
+
+    for (int run = 0; run < 50; ++run) {
+        const MapSpec spec = map.make_spec();
+        std::size_t      key_count = 0;
+
+        for (const dungeon::map::ItemSpec& item : spec.items) {
+            if (item.kind == ItemKind::Key) {
+                ++key_count;
+            }
+        }
+
+        CHECK_EQ(key_count, 1U);
+    }
+}
+
+DUNGEON_TEST(map, generate_places_items_from_the_spec)
+{
+    Map source;
+    const MapSpec spec = source.make_spec(80, 40);
+
+    Map map;
+    map.generate(spec);
+
+    CHECK_EQ(map.entities().size(), spec.items.size() + 1);
+
+    std::size_t key_count = 0;
+    for (const dungeon::map::entities::Entity& entity : map.entities()) {
+        if (entity.tile() == 'k') {
+            ++key_count;
+        }
+    }
+    CHECK_EQ(key_count, 1U);
+
+    for (const dungeon::map::ItemSpec& item : spec.items) {
+        CHECK(has_entity_at(map, item_glyph(item.kind), item.x, item.y));
+    }
+}
+
+DUNGEON_TEST(map, clear_removes_entities)
+{
+    Map map;
+    map.generate();
+
+    CHECK(!map.entities().empty());
+
+    map.clear();
+
+    CHECK(map.entities().empty());
+    CHECK_EQ(map.entrance().x, 0U);
+    CHECK_EQ(map.entrance().y, 0U);
 }
 
 DUNGEON_TEST(map, generate_recreates_a_spec_exactly)

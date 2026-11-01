@@ -51,3 +51,5 @@ cmake-build-*/
 .DS_Store
 Thumbs.db
 *.dSYM/
+
+compile_commands.json

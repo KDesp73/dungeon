@@ -84,6 +84,14 @@ enum class ItemType : unsigned char {
     Equipable, Interactable
 };
 
+/// Item kinds the dungeon generator can place in a room.
+enum class ItemKind : unsigned char {
+    Coin,
+    CoinDouble,
+    Key,
+    Chest,
+};
+
 class Item : public Entity {
 public:
     Item(char tile, Color color, Style style, ItemType type, Stats stats, std::size_t x = 0, std::size_t y = 0)
@@ -120,6 +128,12 @@ class Coin : public Item {
 public:
     Coin(std::size_t x, std::size_t y)
         : Item('$', Color::Yellow, Style::Bold, ItemType::Equipable, Stats{.gold = 1}, x, y) {}
+};
+
+class CoinDouble : public Item {
+public:
+    CoinDouble(std::size_t xx, std::size_t yy)
+        : Item('$', Color::Yellow, Style::Bold, ItemType::Equipable, Stats{.gold = 2}, xx, yy) {}
 };
 
 class Key : public Item {
