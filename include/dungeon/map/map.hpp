@@ -127,8 +127,11 @@ class Map {
 
     /// Creates a random dungeon layout without changing the map.
     ///
-    /// The spec includes an entrance, a distant exit, and the items rolled for
-    /// each room. Pass the result to `generate(const MapSpec&)` to build it.
+    /// Rooms are placed on an optional 3x3 grid, with slight random variation
+    /// in their size and position, and connected by horizontal or vertical
+    /// walkways. The spec includes an entrance, a distant exit, and the items
+    /// rolled for each room. Pass the result to `generate(const MapSpec&)` to
+    /// build it.
     [[nodiscard]] MapSpec make_spec(std::size_t width = 64, std::size_t height = 32);
 
     /// Removes every tile and resets the map to zero width and height.
@@ -242,21 +245,14 @@ class Map {
 
     /// Carves a walkway between two cells.
     ///
-    /// Tries a straight Bresenham line first, so clear connections keep the
-    /// original diagonal look. If that line would enter a room, the walkway
-    /// falls back to a path that routes around the rooms instead.
+    /// The route only uses horizontal and vertical steps, so it never produces
+    /// diagonal corridors. Blocked rooms are routed around using the open space
+    /// between the grid cells.
     ///
     /// @throws std::out_of_range when either endpoint is outside the map.
     /// @throws std::runtime_error when no route between the endpoints exists.
     void walkway(std::size_t start_x, std::size_t start_y, std::size_t end_x, std::size_t end_y,
                  const std::vector<RoomSpec>& rooms);
-
-    /// Fills one corner wherever the path touches another path tile diagonally.
-    ///
-    /// This keeps diagonal routes while preventing the two remaining corner
-    /// cells from both staying floor. Only free floor cells outside @p rooms
-    /// are filled.
-    void fill_walkway_corners(const std::vector<RoomSpec>& rooms);
 };
 
 } // namespace dungeon::map

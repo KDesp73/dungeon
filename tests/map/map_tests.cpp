@@ -7,10 +7,13 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 using dungeon::map::DoorSide;
 using dungeon::map::Map;
 using dungeon::map::MapSpec;
+using dungeon::map::Point;
+using dungeon::map::RoomSpec;
 using dungeon::map::Tile;
 using dungeon::map::entities::ItemKind;
 
@@ -51,11 +54,6 @@ bool inside_room(const dungeon::map::RoomSpec& room, std::size_t x, std::size_t 
            y < room.y + room.height;
 }
 
-bool is_path(Tile tile)
-{
-    return tile == Tile::Walkway || tile == Tile::Door;
-}
-
 bool has_entity_at(const Map& map, char tile, std::size_t x, std::size_t y)
 {
     for (const dungeon::map::entities::Entity& entity : map.entities()) {
@@ -80,6 +78,76 @@ char item_glyph(ItemKind kind)
         return '?';
     }
     return '?';
+}
+
+Point door_position(const RoomSpec& room, DoorSide side)
+{
+    std::size_t x = room.x + room.width / 2;
+    std::size_t y = room.y + room.height / 2;
+
+    switch (side) {
+    case DoorSide::Top:
+        y = room.y;
+        break;
+    case DoorSide::Right:
+        x = room.x + room.width - 1;
+        break;
+    case DoorSide::Bottom:
+        y = room.y + room.height - 1;
+        break;
+    case DoorSide::Left:
+        x = room.x;
+        break;
+    }
+
+    return Point{x, y};
+}
+
+bool path_reachable(const Map& map, Point start, Point goal)
+{
+    if (start.x >= map.width() || start.y >= map.height() || goal.x >= map.width() ||
+        goal.y >= map.height()) {
+        return false;
+    }
+
+    constexpr int offset_x[4] = {0, 1, 0, -1};
+    constexpr int offset_y[4] = {-1, 0, 1, 0};
+
+    std::vector<Point> pending{start};
+    std::set<std::pair<std::size_t, std::size_t>> seen{{start.x, start.y}};
+
+    while (!pending.empty()) {
+        const Point point = pending.back();
+        pending.pop_back();
+
+        if (point.x == goal.x && point.y == goal.y) {
+            return true;
+        }
+
+        for (int move = 0; move < 4; ++move) {
+            const int next_x = static_cast<int>(point.x) + offset_x[move];
+            const int next_y = static_cast<int>(point.y) + offset_y[move];
+
+            if (next_x < 0 || next_y < 0 || next_x >= static_cast<int>(map.width()) ||
+                next_y >= static_cast<int>(map.height())) {
+                continue;
+            }
+
+            const auto cell =
+                std::make_pair(static_cast<std::size_t>(next_x), static_cast<std::size_t>(next_y));
+
+            if (!seen.insert(cell).second) {
+                continue;
+            }
+
+            const Tile tile = map.at(cell.first, cell.second);
+            if (tile == Tile::Walkway || tile == Tile::Door) {
+                pending.push_back(Point{cell.first, cell.second});
+            }
+        }
+    }
+
+    return false;
 }
 
 }  // namespace
@@ -198,7 +266,7 @@ DUNGEON_TEST(map, walkways_never_cross_rooms)
     }
 }
 
-DUNGEON_TEST(map, walkways_prefer_direct_diagonal_routes)
+DUNGEON_TEST(map, walkways_use_orthogonal_connections)
 {
     MapSpec spec;
     spec.width  = 20;
@@ -209,22 +277,12 @@ DUNGEON_TEST(map, walkways_prefer_direct_diagonal_routes)
     Map map;
     map.generate(spec);
 
-    CHECK(map.at(7, 4) == Tile::Door);
-    CHECK(map.at(12, 8) == Tile::Door);
+    const Point from = door_position(spec.rooms[0], DoorSide::Right);
+    const Point to   = door_position(spec.rooms[1], DoorSide::Left);
 
-    // The original Bresenham line from (7, 4) to (12, 8).
-    CHECK(map.at(8, 5) == Tile::Walkway);
-    CHECK(map.at(9, 6) == Tile::Walkway);
-    CHECK(map.at(10, 6) == Tile::Walkway);
-    CHECK(map.at(11, 7) == Tile::Walkway);
-
-    // The diagonal steps are kept, but one shared corner per step is filled so
-    // the path never leaves two diagonally adjacent floor tiles.
-    CHECK(map.at(8, 4) == Tile::Walkway);
-    CHECK(map.at(9, 5) == Tile::Walkway);
-    CHECK(map.at(11, 6) == Tile::Walkway);
-    CHECK(map.at(11, 8) == Tile::Walkway);
-    CHECK_EQ(count_tiles(map, Tile::Walkway), 8U);
+    CHECK(map.at(from.x, from.y) == Tile::Door);
+    CHECK(map.at(to.x, to.y) == Tile::Door);
+    CHECK(path_reachable(map, from, to));
 }
 
 DUNGEON_TEST(map, walkways_detour_around_blocking_rooms)
@@ -259,43 +317,18 @@ DUNGEON_TEST(map, walkways_detour_around_blocking_rooms)
     }
 }
 
-DUNGEON_TEST(map, walkway_diagonals_have_no_open_corners)
+DUNGEON_TEST(map, walkways_connect_every_door_orthogonally)
 {
     for (int run = 0; run < 30; ++run) {
         Map map;
-        map.generate();
+        const MapSpec spec = map.make_spec();
+        map.generate(spec);
 
-        for (std::size_t y = 0; y < map.height(); ++y) {
-            for (std::size_t x = 0; x < map.width(); ++x) {
-                if (!is_path(map.at(x, y))) {
-                    continue;
-                }
+        for (const dungeon::map::ConnectionSpec& connection : spec.connections) {
+            const Point from = door_position(spec.rooms[connection.from], connection.from_side);
+            const Point to   = door_position(spec.rooms[connection.to], connection.to_side);
 
-                for (int offset_y = -1; offset_y <= 1; offset_y += 2) {
-                    for (int offset_x = -1; offset_x <= 1; offset_x += 2) {
-                        const int diagonal_x = static_cast<int>(x) + offset_x;
-                        const int diagonal_y = static_cast<int>(y) + offset_y;
-
-                        if (diagonal_x < 0 || diagonal_y < 0 ||
-                            diagonal_x >= static_cast<int>(map.width()) ||
-                            diagonal_y >= static_cast<int>(map.height())) {
-                            continue;
-                        }
-
-                        const std::size_t next_x = static_cast<std::size_t>(diagonal_x);
-                        const std::size_t next_y = static_cast<std::size_t>(diagonal_y);
-
-                        if (!is_path(map.at(next_x, next_y))) {
-                            continue;
-                        }
-
-                        const bool corner_a_is_floor = map.at(next_x, y) == Tile::Empty;
-                        const bool corner_b_is_floor = map.at(x, next_y) == Tile::Empty;
-
-                        CHECK(!(corner_a_is_floor && corner_b_is_floor));
-                    }
-                }
-            }
+            CHECK(path_reachable(map, from, to));
         }
     }
 }
@@ -340,6 +373,34 @@ DUNGEON_TEST(map, make_spec_describes_the_generated_dungeon)
     for (const dungeon::map::ConnectionSpec& connection : spec.connections) {
         CHECK(connection.from < spec.rooms.size());
         CHECK(connection.to < spec.rooms.size());
+    }
+}
+
+DUNGEON_TEST(map, make_spec_places_rooms_on_a_three_by_three_grid)
+{
+    Map map;
+
+    for (int run = 0; run < 50; ++run) {
+        const MapSpec spec = map.make_spec();
+        REQUIRE(spec.rooms.size() >= 3);
+        CHECK(spec.rooms.size() <= 9);
+
+        const std::size_t cell_width  = (spec.width - 4) / 3;
+        const std::size_t cell_height = (spec.height - 4) / 3;
+        REQUIRE(cell_width > 0);
+        REQUIRE(cell_height > 0);
+
+        std::set<std::pair<std::size_t, std::size_t>> cells;
+        for (const RoomSpec& room : spec.rooms) {
+            const std::size_t center_x = room.x + room.width / 2;
+            const std::size_t center_y = room.y + room.height / 2;
+            const std::size_t column   = (center_x - 2) / cell_width;
+            const std::size_t row      = (center_y - 2) / cell_height;
+
+            CHECK(column < 3);
+            CHECK(row < 3);
+            CHECK(cells.insert({row, column}).second);
+        }
     }
 }
 

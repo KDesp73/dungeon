@@ -21,8 +21,8 @@ inline constexpr std::size_t CHEST_LOOT_MIN = 1;
 inline constexpr std::size_t CHEST_LOOT_MAX = 3;
 /// Probability that a chest loot roll is a double-value coin.
 inline constexpr double CHEST_LOOT_DOUBLE_COIN = 0.25;
-/// Probability that a room uses the larger size range.
-inline constexpr double ROOM_BIG = 0.35;
+/// Probability that a cell in the 3x3 room grid contains a room.
+inline constexpr double ROOM_PRESENT = 0.75;
 
 /// Relative weight for placing the key in the player's starting room.
 inline constexpr double KEY_SAME_ROOM_WEIGHT = 0.1;

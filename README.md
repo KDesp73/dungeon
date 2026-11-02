@@ -16,7 +16,7 @@ hooks for items. Combat and enemy AI are still to come.
 | ------------ | --------------------------------------------------------------------- |
 | Build system | CMake presets, strict warnings, ASan/UBSan, CTest, GitHub Actions      |
 | Terminal     | `dungeon::display::tui::term_size()` reads the terminal dimensions     |
-| Map          | Rooms, doors, walkways, entrance/exit, and random item spawns; replay |
+| Map          | Optional 3x3 room grid, orthogonal corridors, entrance/exit, item spawns |
 | Rendering    | Double-buffered framebuffer with game, stats, inventory, message, and chest panels |
 | Tests        | Lightweight harness with `core`, `display`, `game`, and `map` suites  |
 | Gameplay     | WASD/arrow movement, cached player access, and item action hooks       |
@@ -51,10 +51,12 @@ Generated maps use these glyphs:
 Every map has a seed exposed through `Map::seed()`; the executable prints it so
 a run can later be replayed once seed input is supported. `Map::make_spec()`
 returns a `MapSpec` containing the rooms, connections, entrance, exit, and
-random item spawns. Each dungeon contains exactly one key, biased away from the
-player's starting room and its neighbours, and diamonds spawn rarely.
-`Map::generate(const MapSpec&)` rebuilds that exact layout and places the player
-and items without regenerating anything randomly.
+random item spawns. Rooms are placed on an optional 3x3 grid with slight random
+variation in size and position, and corridors only turn horizontally or
+vertically, so generated walkways never run diagonally. Each dungeon contains
+exactly one key, biased away from the player's starting room and its neighbours,
+and diamonds spawn rarely. `Map::generate(const MapSpec&)` rebuilds that exact
+layout and places the player and items without regenerating anything randomly.
 
 ## Movement and actions
 
