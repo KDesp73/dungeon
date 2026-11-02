@@ -14,6 +14,24 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 option(DUNGEON_BUILD_TESTS "Build the unit test suite" ON)
 option(DUNGEON_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 
+if(EMSCRIPTEN)
+    # Sanitizers are generally not supported under Emscripten
+    set(DUNGEON_SANITIZE "none" CACHE STRING "" FORCE)
+
+    # Tell Emscripten to output an HTML wrapper page for testing
+    set(CMAKE_EXECUTABLE_SUFFIX ".html")
+
+    # Optional: Emscripten link flags (e.g., memory growth, preloading assets)
+    set(CMAKE_EXECUTABLE_SUFFIX ".html")
+endif()
+
+# Conditionally include sanitizers only if NOT targeting Emscripten
+if(NOT EMSCRIPTEN)
+    include(Sanitizers)
+    dungeon_enable_sanitizers(dungeon_core)
+    dungeon_enable_sanitizers(dungeon)
+endif()
+
 set(DUNGEON_SANITIZE "none" CACHE STRING
     "Sanitizers to enable: none, address, undefined, address,undefined, thread")
 set_property(CACHE DUNGEON_SANITIZE PROPERTY STRINGS

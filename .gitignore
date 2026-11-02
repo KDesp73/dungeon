@@ -1,5 +1,6 @@
 # --- Build Directories & CMake ---
 build/
+build-wasm/
 bin/
 out/
 CMakeCache.txt
