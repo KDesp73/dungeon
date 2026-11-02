@@ -170,6 +170,38 @@ DUNGEON_TEST(map, seed_stays_the_same_for_a_map_instance)
     CHECK_EQ(map.seed(), seed);
 }
 
+DUNGEON_TEST(map, a_seed_reproduces_the_same_dungeon)
+{
+    Map first(12345);
+    Map second(12345);
+
+    first.generate();
+    second.generate();
+
+    CHECK_EQ(first.seed(), 12345U);
+    CHECK_EQ(second.seed(), 12345U);
+    CHECK(snapshot(first) == snapshot(second));
+}
+
+DUNGEON_TEST(map, reseeding_restarts_the_random_sequence)
+{
+    Map map(1);
+    const std::string first = [&map] {
+        map.generate();
+        return snapshot(map);
+    }();
+
+    map.reseed(1);
+    map.generate();
+
+    CHECK(snapshot(map) == first);
+
+    map.reseed(2);
+    map.generate();
+
+    CHECK(snapshot(map) != first);
+}
+
 DUNGEON_TEST(map, generate_defaults_to_64_by_32)
 {
     Map map;

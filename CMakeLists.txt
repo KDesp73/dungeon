@@ -66,8 +66,27 @@ dungeon_enable_sanitizers(dungeon_core)
 # dungeon: the executable
 # ---------------------------------------------------------------------------
 
+# CLI11 provides the command line parser. Prefer a system package when one is
+# available; otherwise CMake fetches a pinned release.
+find_package(CLI11 CONFIG QUIET)
+if(NOT CLI11_FOUND)
+    include(FetchContent)
+
+    set(CLI11_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(CLI11_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(CLI11_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set(CLI11_INSTALL OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(
+        CLI11
+        GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
+        GIT_TAG v2.7.2
+        GIT_SHALLOW TRUE)
+    FetchContent_MakeAvailable(CLI11)
+endif()
+
 add_executable(dungeon src/main.cpp)
-target_link_libraries(dungeon PRIVATE dungeon::core)
+target_link_libraries(dungeon PRIVATE dungeon::core CLI11::CLI11)
 
 dungeon_set_warnings(dungeon)
 dungeon_enable_sanitizers(dungeon)

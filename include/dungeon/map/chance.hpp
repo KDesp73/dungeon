@@ -56,6 +56,12 @@ public:
 
     [[nodiscard]] std::uint32_t seed() const { return _seed; }
 
+    /// Replaces the seed and restarts the random sequence.
+    void reseed(std::uint32_t seed) {
+        _seed = seed;
+        _rng.seed(_seed);
+    }
+
     // Returns true if a random roll succeeds based on probability (0.0 to 1.0)
     [[nodiscard]] bool roll(double probability) {
         std::uniform_real_distribution<double> dist(0.0, 1.0);

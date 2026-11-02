@@ -21,14 +21,29 @@ hooks for items. Combat and enemy AI are still to come.
 | Tests        | Lightweight harness with `core`, `display`, `game`, and `map` suites  |
 | Gameplay     | WASD/arrow movement, cached player access, and item action hooks       |
 
-The executable currently prints the project version and run seed, then enters a
-fixed-timestep loop that draws the generated map in the left game viewport, a
-stats column on the right, and an inventory, message log, and chest panel across
-the bottom. Simulation time advances at 60 ticks per second; rendering is paced
-to the next tick. `W`, `A`, `S`, and `D` or the arrow keys move the player one
-cell in the matching direction. While next to a chest, `[` and `]` cycle through
-its items, `1`-`9` select one directly, and `Enter` takes the selected item.
-Press `Esc` or `Ctrl+C` to quit.
+The executable accepts `--help`, `--version`, `--seed <n>`, and `--print-map`.
+`--seed` makes dungeon generation reproducible, and `--print-map` writes the
+generated dungeon to stdout, reports its seed on stderr, and exits. Without those
+options it prints the project version and run seed, then enters a fixed-timestep
+loop that draws the generated map in the left game viewport, a stats column on
+the right, and an inventory, message log, and chest panel across the bottom.
+Simulation time advances at 60 ticks per second; rendering is paced to the next
+tick. `W`, `A`, `S`, and `D` or the arrow keys move the player one cell in the
+matching direction. While next to a chest, `[` and `]` cycle through its items,
+`1`-`9` select one directly, and `Enter` takes the selected item. Press `Esc` or
+`Ctrl+C` to quit.
+
+## Command line
+
+```sh
+./build/dev/dungeon --help
+./build/dev/dungeon --version
+./build/dev/dungeon --seed 12345
+./build/dev/dungeon --print-map --seed 12345
+```
+
+Passing the same seed to `--print-map` twice produces the same dungeon.
+Without `--seed`, a fresh random seed is chosen and reported on stderr.
 
 ## Map output
 
@@ -48,8 +63,8 @@ Generated maps use these glyphs:
 | `?`      | chest                             |
 | space    | empty space outside rooms         |
 
-Every map has a seed exposed through `Map::seed()`; the executable prints it so
-a run can later be replayed once seed input is supported. `Map::make_spec()`
+Every map has a seed exposed through `Map::seed()`; the executable prints it and
+accepts `--seed` to replay a run. `Map::make_spec()`
 returns a `MapSpec` containing the rooms, connections, entrance, exit, and
 random item spawns. Rooms are placed on an optional 3x3 grid with slight random
 variation in size and position, and corridors only turn horizontally or
@@ -100,7 +115,9 @@ dispatch. Built-in pickup effects still apply when no hook is installed.
 - Ninja (optional, only for the presets that use it)
 - A POSIX system: Linux, macOS or a similar Unix
 
-No third party libraries are required.
+No third party libraries are required at runtime. CLI11 is used for command
+line parsing and is fetched automatically by CMake when a system package is not
+available, so the first configure needs network access.
 
 ## Building
 

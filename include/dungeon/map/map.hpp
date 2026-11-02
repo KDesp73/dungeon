@@ -107,6 +107,12 @@ class Map {
   public:
     Map() = default;
 
+    /// Creates a map that generates reproducible dungeons from @p seed.
+    explicit Map(std::uint32_t seed) : _chance(seed) {}
+
+    /// Replaces the generator seed and restarts the random sequence.
+    void reseed(std::uint32_t seed) noexcept { _chance.reseed(seed); }
+
     /// Builds a random dungeon.
     ///
     /// The number, positions, and dimensions of the rooms vary on every call.
