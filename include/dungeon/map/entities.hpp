@@ -1,29 +1,16 @@
 #pragma once
 
+#include "dungeon/display/style.hpp"
+
 #include <cstddef>
+#include <optional>
 #include <utility>
 #include <vector>
 
 namespace dungeon::map::entities {
 
-enum class Color : unsigned char {
-    Red,
-    Blue,
-    Green,
-    Yellow,
-    Grey,
-    Black,
-    White,
-    Cyan,
-    Purple
-};
-
-enum class Style : unsigned char {
-    None,
-    Underline,
-    Bold,
-    Italic
-};
+using Color = dungeon::display::Color;
+using Style = dungeon::display::TextStyle;
 
 class Entity {
     inline static int entity_id = 1;
@@ -111,6 +98,7 @@ enum class ItemKind : unsigned char {
     CoinDouble,
     Key,
     Chest,
+    Diamond,
 };
 
 class Item : public Entity {
@@ -168,6 +156,13 @@ class CoinDouble : public Item {
                stat_delta(0, 0, 0, 2), xx, yy) {}
 };
 
+class Diamond : public Item {
+  public:
+    Diamond(std::size_t x, std::size_t y)
+        : Item('$', Color::Cyan, Style::Bold, ItemType::Equipable, ItemKind::Diamond,
+               stat_delta(0, 0, 0, 10), x, y) {}
+};
+
 class Key : public Item {
   public:
     Key(std::size_t x, std::size_t y)
@@ -178,8 +173,31 @@ class Key : public Item {
 class Chest : public Item {
   public:
     Chest(std::size_t x, std::size_t y)
-        : Item('?', Color::Purple, Style::Bold, ItemType::Interactable, ItemKind::Chest,
+        : Item('?', Color::Magenta, Style::Bold, ItemType::Interactable, ItemKind::Chest,
                stat_delta(), x, y) {}
+
+    /// Items still inside the chest, in display order.
+    [[nodiscard]] const std::vector<Item>& contents() const noexcept { return _contents; }
+    [[nodiscard]] bool                     empty() const noexcept { return _contents.empty(); }
+
+    /// Adds @p item to the chest.
+    void add(Item item) { _contents.push_back(std::move(item)); }
+
+    /// Removes and returns the item at @p index.
+    ///
+    /// Returns `std::nullopt` when @p index is out of range.
+    [[nodiscard]] std::optional<Item> take(std::size_t index) {
+        if (index >= _contents.size()) {
+            return std::nullopt;
+        }
+
+        Item item = std::move(_contents[index]);
+        _contents.erase(_contents.begin() + static_cast<std::ptrdiff_t>(index));
+        return item;
+    }
+
+  private:
+    std::vector<Item> _contents;
 };
 
 class Player : public Entity, public Alive {

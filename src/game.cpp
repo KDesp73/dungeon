@@ -1,6 +1,9 @@
 #include "dungeon/game.hpp"
 
+#include <algorithm>
 #include <cstddef>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace dungeon::game {
@@ -12,6 +15,23 @@ bool one_square_apart(const map::entities::Entity& a, const map::entities::Entit
     const std::size_t dx = a.x > b.x ? a.x - b.x : b.x - a.x;
     const std::size_t dy = a.y > b.y ? a.y - b.y : b.y - a.y;
     return dx + dy == 1;
+}
+
+/// Returns a short human readable name for @p kind.
+std::string item_name(map::entities::ItemKind kind) {
+    switch (kind) {
+    case map::entities::ItemKind::Coin:
+        return "coin";
+    case map::entities::ItemKind::CoinDouble:
+        return "double coin";
+    case map::entities::ItemKind::Diamond:
+        return "diamond";
+    case map::entities::ItemKind::Key:
+        return "key";
+    case map::entities::ItemKind::Chest:
+        return "chest";
+    }
+    return "item";
 }
 
 } // namespace
@@ -80,10 +100,12 @@ Game::Game(const map::MapSpec& spec) {
 
 void Game::generate(std::size_t width, std::size_t height) {
     _map.generate(width, height);
+    push_message("You enter the dungeon.");
 }
 
 void Game::generate(const map::MapSpec& spec) {
     _map.generate(spec);
+    push_message("You enter the dungeon.");
 }
 
 bool Game::move(Direction direction) {
@@ -136,6 +158,119 @@ void Game::advance_level() {
         next->restore(stats, inventory);
         next->drop(map::entities::ItemKind::Key);
     }
+
+    push_message("You descend deeper.");
+}
+
+const map::entities::Chest* Game::nearby_chest() const noexcept {
+    const auto* player = _map.player();
+    if (player == nullptr) {
+        return nullptr;
+    }
+
+    for (const map::EntityPtr& entity : _map.entity_ptrs()) {
+        const auto* chest = dynamic_cast<const map::entities::Chest*>(entity.get());
+        if (chest == nullptr) {
+            continue;
+        }
+
+        const std::size_t dx = chest->x > player->x ? chest->x - player->x : player->x - chest->x;
+        const std::size_t dy = chest->y > player->y ? chest->y - player->y : player->y - chest->y;
+
+        if (dx + dy <= 1) {
+            return chest;
+        }
+    }
+
+    return nullptr;
+}
+
+map::entities::Chest* Game::nearby_chest() noexcept {
+    return const_cast<map::entities::Chest*>(std::as_const(*this).nearby_chest());
+}
+
+void Game::cycle_chest_selection(int delta) noexcept {
+    const auto* chest = nearby_chest();
+    const std::size_t count = chest != nullptr ? chest->contents().size() : 0;
+
+    if (count == 0) {
+        _chest_selection = 0;
+        return;
+    }
+
+    if (_chest_selection >= count) {
+        _chest_selection = 0;
+    }
+
+    if (delta > 0) {
+        _chest_selection = (_chest_selection + 1) % count;
+    } else if (delta < 0) {
+        _chest_selection = (_chest_selection + count - 1) % count;
+    }
+}
+
+void Game::select_chest_item(std::size_t index) noexcept {
+    const auto* chest = nearby_chest();
+
+    if (chest == nullptr || chest->contents().empty()) {
+        _chest_selection = 0;
+        return;
+    }
+
+    _chest_selection = std::min(index, chest->contents().size() - 1);
+}
+
+bool Game::take_selected_chest_item() {
+    auto* player = _map.player();
+    auto* chest  = nearby_chest();
+
+    if (player == nullptr || chest == nullptr) {
+        return false;
+    }
+
+    if (chest->empty()) {
+        push_message("The chest is empty.");
+        return false;
+    }
+
+    if (_chest_selection >= chest->contents().size()) {
+        _chest_selection = chest->contents().size() - 1;
+    }
+
+    std::optional<map::entities::Item> item = chest->take(_chest_selection);
+    if (!item) {
+        return false;
+    }
+
+    if (item->kind() == map::entities::ItemKind::Coin ||
+        item->kind() == map::entities::ItemKind::CoinDouble ||
+        item->kind() == map::entities::ItemKind::Diamond) {
+        const int gold = item->gold();
+        static_cast<void>(item->equip(player->stats()));
+        push_message("+" + std::to_string(gold) + " gold");
+    } else {
+        const map::entities::ItemKind kind = item->kind();
+        player->equip(*item);
+        push_message("Took the " + item_name(kind) + ".");
+    }
+
+    if (chest->contents().empty()) {
+        _chest_selection = 0;
+    } else if (_chest_selection >= chest->contents().size()) {
+        _chest_selection = chest->contents().size() - 1;
+    }
+
+    return true;
+}
+
+void Game::push_message(std::string message) {
+    constexpr std::size_t kMaxMessages = 50;
+
+    if (_messages.size() >= kMaxMessages) {
+        _messages.erase(_messages.begin());
+    }
+
+    _messages.push_back(std::move(message));
 }
 
 void Game::apply_step_action(const ActionEvent& event) {
@@ -146,12 +281,17 @@ void Game::apply_step_action(const ActionEvent& event) {
     switch (event.item.kind()) {
     case map::entities::ItemKind::Coin:
     case map::entities::ItemKind::CoinDouble:
+    case map::entities::ItemKind::Diamond: {
+        const int gold = event.item.gold();
         static_cast<void>(event.item.equip(event.player.stats()));
         static_cast<void>(_map.remove(event.item.id()));
+        push_message("+" + std::to_string(gold) + " gold");
         break;
+    }
     case map::entities::ItemKind::Key:
         event.player.equip(event.item);
         static_cast<void>(_map.remove(event.item.id()));
+        push_message("Key acquired.");
         break;
     case map::entities::ItemKind::Chest:
         break;

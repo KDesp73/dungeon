@@ -3,7 +3,9 @@
 #include "dungeon/game.hpp"
 #include "dungeon/map/map.hpp"
 
+#include <algorithm>
 #include <cstddef>
+#include <string>
 #include <vector>
 
 using dungeon::game::ActionEvent;
@@ -251,18 +253,82 @@ DUNGEON_TEST(game, an_interactable_one_square_away_triggers_a_nearby_action) {
     CHECK_EQ(count_actions(actions, ActionTrigger::Step), 0U);
 }
 
-DUNGEON_TEST(game, stepping_onto_an_interactable_triggers_only_a_step_action) {
+DUNGEON_TEST(game, a_nearby_chest_exposes_its_contents) {
     MapSpec spec = make_test_spec();
-    spec.items   = {{ItemKind::Chest, 4, 3}};
+    spec.items   = {{ItemKind::Chest,
+                     5,
+                     3,
+                     {ItemKind::Coin, ItemKind::CoinDouble}}};
 
-    Game                        game(spec);
-    std::vector<RecordedAction> actions;
-    record_actions(game, actions);
+    Game game(spec);
+    REQUIRE(game.move(Direction::Right));
 
-    CHECK(game.move(Direction::Right));
+    const auto* chest = game.nearby_chest();
+    REQUIRE(chest != nullptr);
+    REQUIRE(chest->contents().size() == 2U);
+    CHECK(chest->contents()[0].kind() == ItemKind::Coin);
+    CHECK(chest->contents()[1].kind() == ItemKind::CoinDouble);
+}
 
-    CHECK(has_action(actions, ActionTrigger::Step, '?', 4, 3));
-    CHECK_EQ(count_actions(actions, ActionTrigger::Nearby), 0U);
+DUNGEON_TEST(game, the_selected_chest_item_can_be_taken) {
+    MapSpec spec = make_test_spec();
+    spec.items   = {{ItemKind::Chest,
+                     5,
+                     3,
+                     {ItemKind::Coin, ItemKind::CoinDouble}}};
+
+    Game game(spec);
+    REQUIRE(game.move(Direction::Right));
+    REQUIRE(game.player() != nullptr);
+
+    const int gold_before = game.player()->stats().gold;
+
+    game.cycle_chest_selection(1);
+    CHECK_EQ(game.chest_selection(), 1U);
+    CHECK(game.take_selected_chest_item());
+
+    CHECK_EQ(game.player()->stats().gold, gold_before + 2);
+    REQUIRE(game.nearby_chest() != nullptr);
+    REQUIRE(game.nearby_chest()->contents().size() == 1U);
+    CHECK_EQ(game.chest_selection(), 0U);
+}
+
+DUNGEON_TEST(game, taking_a_key_from_a_chest_equips_it) {
+    MapSpec spec = make_test_spec();
+    spec.items   = {{ItemKind::Chest, 5, 3, {ItemKind::Key}}};
+
+    Game game(spec);
+    REQUIRE(game.move(Direction::Right));
+    REQUIRE(game.player() != nullptr);
+
+    CHECK(!game.player()->has_key());
+    CHECK(game.take_selected_chest_item());
+    CHECK(game.player()->has_key());
+    REQUIRE(game.nearby_chest() != nullptr);
+    CHECK(game.nearby_chest()->empty());
+}
+
+DUNGEON_TEST(game, taking_from_an_empty_chest_fails_and_reports_it) {
+    MapSpec spec = make_test_spec();
+    spec.items   = {{ItemKind::Chest, 5, 3}};
+
+    Game game(spec);
+    REQUIRE(game.move(Direction::Right));
+
+    CHECK(!game.take_selected_chest_item());
+    REQUIRE(!game.messages().empty());
+    CHECK_EQ(game.messages().back(), std::string("The chest is empty."));
+}
+
+DUNGEON_TEST(game, a_collected_coin_adds_a_message) {
+    MapSpec spec = make_test_spec();
+    spec.items   = {{ItemKind::Coin, 4, 3}};
+
+    Game game(spec);
+    REQUIRE(game.move(Direction::Right));
+
+    CHECK(std::find(game.messages().begin(), game.messages().end(), std::string("+1 gold")) !=
+          game.messages().end());
 }
 
 DUNGEON_TEST(game, a_hook_can_remove_the_item_it_receives) {

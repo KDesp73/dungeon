@@ -13,6 +13,12 @@ inline constexpr double COIN = 0.6;
 inline constexpr double COIN_DOUBLE = 0.3;
 /// Probability that a room contains a chest.
 inline constexpr double CHEST = 0.2;
+/// Minimum number of items rolled into a generated chest.
+inline constexpr std::size_t CHEST_LOOT_MIN = 1;
+/// Maximum number of items rolled into a generated chest.
+inline constexpr std::size_t CHEST_LOOT_MAX = 3;
+/// Probability that a chest loot roll is a double-value coin.
+inline constexpr double CHEST_LOOT_DOUBLE_COIN = 0.25;
 /// Probability that a room uses the larger size range.
 inline constexpr double ROOM_BIG = 0.35;
 

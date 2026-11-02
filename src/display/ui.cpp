@@ -19,57 +19,14 @@ constexpr std::size_t kUiGap = 1;
 constexpr CellStyle kBorderStyle{Color::BrightBlack, Color::Default, TextStyle::None};
 constexpr CellStyle kTitleStyle{Color::BrightWhite, Color::Default, TextStyle::Bold};
 constexpr CellStyle kExitStyle{Color::BrightGreen, Color::Default, TextStyle::Bold};
+constexpr CellStyle kSelectionStyle{Color::Black, Color::BrightGreen, TextStyle::Bold};
 
 constexpr bool has_border(const Rect& rect) noexcept {
     return rect.width >= 2 && rect.height >= 2;
 }
 
-constexpr Color to_color(dungeon::map::entities::Color color) noexcept {
-    using dungeon::map::entities::Color;
-
-    switch (color) {
-    case Color::Red:
-        return dungeon::display::Color::Red;
-    case Color::Blue:
-        return dungeon::display::Color::Blue;
-    case Color::Green:
-        return dungeon::display::Color::Green;
-    case Color::Yellow:
-        return dungeon::display::Color::Yellow;
-    case Color::Grey:
-        return dungeon::display::Color::BrightBlack;
-    case Color::Black:
-        return dungeon::display::Color::Black;
-    case Color::White:
-        return dungeon::display::Color::White;
-    case Color::Cyan:
-        return dungeon::display::Color::Cyan;
-    case Color::Purple:
-        return dungeon::display::Color::Magenta;
-    }
-
-    return dungeon::display::Color::Default;
-}
-
-constexpr TextStyle to_text_style(dungeon::map::entities::Style style) noexcept {
-    using dungeon::map::entities::Style;
-
-    switch (style) {
-    case Style::None:
-        return TextStyle::None;
-    case Style::Underline:
-        return TextStyle::Underline;
-    case Style::Bold:
-        return TextStyle::Bold;
-    case Style::Italic:
-        return TextStyle::Italic;
-    }
-
-    return TextStyle::None;
-}
-
 constexpr CellStyle entity_style(const dungeon::map::entities::Entity& entity) noexcept {
-    return CellStyle{to_color(entity.color()), Color::Default, to_text_style(entity.style())};
+    return CellStyle{entity.color(), Color::Default, entity.style()};
 }
 
 constexpr CellStyle tile_style(dungeon::map::Tile tile) noexcept {
@@ -90,6 +47,80 @@ constexpr CellStyle tile_style(dungeon::map::Tile tile) noexcept {
     }
 
     return CellStyle{};
+}
+
+/// Draws at most @p max_width code points of @p text.
+void draw_clipped(FrameBuffer& buffer, std::string_view text, std::size_t x, std::size_t y,
+                  std::size_t max_width, CellStyle style = {}) {
+    std::size_t offset    = 0;
+    std::size_t column    = 0;
+    char32_t    codepoint = U'\0';
+
+    while (offset < text.size() && column < max_width) {
+        const std::size_t consumed = utf8::decode(text, offset, codepoint);
+        if (consumed == 0) {
+            break;
+        }
+
+        buffer.draw(x + column, y, codepoint, style);
+        offset += consumed;
+        ++column;
+    }
+}
+
+/// Returns the chest the player is standing on or orthogonally next to.
+const dungeon::map::entities::Chest* nearby_chest(const dungeon::map::Map& map) {
+    const auto* player = map.player();
+    if (player == nullptr) {
+        return nullptr;
+    }
+
+    for (const dungeon::map::EntityPtr& entity : map.entity_ptrs()) {
+        const auto* chest = dynamic_cast<const dungeon::map::entities::Chest*>(entity.get());
+        if (chest == nullptr) {
+            continue;
+        }
+
+        const std::size_t dx = chest->x > player->x ? chest->x - player->x : player->x - chest->x;
+        const std::size_t dy = chest->y > player->y ? chest->y - player->y : player->y - chest->y;
+
+        if (dx + dy <= 1) {
+            return chest;
+        }
+    }
+
+    return nullptr;
+}
+
+/// Draws item slots in the style shared by the inventory and chest panels.
+void draw_item_slots(FrameBuffer& buffer, const Rect& rect,
+                     const std::vector<dungeon::map::entities::Item>* items, std::size_t first,
+                     std::size_t selected, bool has_selection) {
+    const std::size_t slot_count = std::min<std::size_t>((rect.width - 4) / 4, 10);
+    const std::size_t y          = rect.y + 2;
+    std::size_t       column     = rect.x + 2;
+
+    for (std::size_t i = 0; i < slot_count; ++i) {
+        if (i > 0) {
+            ++column;
+        }
+
+        const std::size_t index       = first + i;
+        const bool        is_selected = has_selection && index == selected;
+        const CellStyle   slot_style  = is_selected ? kSelectionStyle : CellStyle{};
+
+        buffer.draw(column++, y, '[', slot_style);
+
+        if (items != nullptr && index < items->size()) {
+            const dungeon::map::entities::Item& item = (*items)[index];
+            buffer.draw(column++, y, item.tile(),
+                        is_selected ? kSelectionStyle : entity_style(item));
+        } else {
+            buffer.draw(column++, y, ' ', slot_style);
+        }
+
+        buffer.draw(column++, y, ']', slot_style);
+    }
 }
 
 void draw_stats(FrameBuffer& buffer, const Rect& rect, std::uint32_t seed,
@@ -134,28 +165,60 @@ void draw_inventory(FrameBuffer& buffer, const Rect& rect,
         return;
     }
 
-    const std::size_t slot_count = std::min<std::size_t>((rect.width - 4) / 4, 10);
-    const auto*       inventory  = player != nullptr ? &player->inventory() : nullptr;
+    const std::vector<dungeon::map::entities::Item>* items =
+        player != nullptr ? &player->inventory() : nullptr;
 
-    const std::size_t y      = rect.y + 2;
-    std::size_t       column = rect.x + 2;
+    draw_item_slots(buffer, rect, items, 0, 0, false);
+}
 
-    for (std::size_t i = 0; i < slot_count; ++i) {
-        if (i > 0) {
-            ++column;
-        }
+void draw_messages(FrameBuffer& buffer, const Rect& rect, std::span<const std::string> messages) {
+    panel(buffer, rect, "MESSAGES");
 
-        buffer.draw(column++, y, '[');
-
-        if (inventory != nullptr && i < inventory->size()) {
-            const dungeon::map::entities::Item& item = (*inventory)[i];
-            buffer.draw(column++, y, item.tile(), entity_style(item));
-        } else {
-            buffer.draw(column++, y, ' ');
-        }
-
-        buffer.draw(column++, y, ']');
+    if (!has_border(rect) || rect.width <= 4) {
+        return;
     }
+
+    const std::size_t inner_width = rect.width - 4;
+    const std::size_t bottom      = rect.y + rect.height - 1;
+    std::size_t       row         = rect.y + rect.height - 2;
+
+    if (messages.empty()) {
+        return;
+    }
+
+    std::ptrdiff_t index = static_cast<std::ptrdiff_t>(messages.size()) - 1;
+    while (index >= 0 && row > rect.y + 1 && row < bottom) {
+        draw_clipped(buffer, messages[static_cast<std::size_t>(index)], rect.x + 2, row,
+                     inner_width, CellStyle{});
+        --row;
+        --index;
+    }
+}
+
+void draw_chest(FrameBuffer& buffer, const Rect& rect,
+                const dungeon::map::entities::Chest* chest, std::size_t selected) {
+    panel(buffer, rect, "CHEST");
+
+    if (!has_border(rect) || rect.width <= 4) {
+        return;
+    }
+
+    if (chest == nullptr) {
+        draw_clipped(buffer, "No chest nearby.", rect.x + 2, rect.y + 2, rect.width - 4,
+                     kBorderStyle);
+        return;
+    }
+
+    if (chest->empty()) {
+        draw_clipped(buffer, "Empty.", rect.x + 2, rect.y + 2, rect.width - 4, kBorderStyle);
+        return;
+    }
+
+    const std::size_t selected_index = std::min(selected, chest->contents().size() - 1);
+    const std::size_t slot_count     = std::min<std::size_t>((rect.width - 4) / 4, 10);
+    const std::size_t first = selected_index >= slot_count ? selected_index - slot_count + 1 : 0;
+
+    draw_item_slots(buffer, rect, &chest->contents(), first, selected_index, true);
 }
 
 } // namespace
@@ -176,9 +239,18 @@ Layout make_layout(std::size_t width, std::size_t height) {
     const std::size_t game_width  = width - stats_width - kUiGap;
     const std::size_t game_height = height - inventory_height - kUiGap;
 
+    const std::size_t bottom_width    = width - 2 * kUiGap;
+    const std::size_t inventory_width = bottom_width / 3;
+    const std::size_t messages_width  = bottom_width / 3;
+    const std::size_t chest_width     = bottom_width - inventory_width - messages_width;
+
     layout.game      = Rect{0, 0, game_width, game_height};
     layout.stats     = Rect{game_width + kUiGap, 0, stats_width, game_height};
-    layout.inventory = Rect{0, game_height + kUiGap, width, inventory_height};
+    layout.inventory = Rect{0, game_height + kUiGap, inventory_width, inventory_height};
+    layout.messages  = Rect{inventory_width + kUiGap, game_height + kUiGap, messages_width,
+                            inventory_height};
+    layout.chest     = Rect{inventory_width + kUiGap + messages_width + kUiGap,
+                            game_height + kUiGap, chest_width, inventory_height};
 
     return layout;
 }
@@ -279,16 +351,23 @@ void draw_map(FrameBuffer& buffer, const dungeon::map::Map& map, const Rect& vie
     }
 }
 
-void draw_ui(FrameBuffer& buffer, const dungeon::map::Map& map, const Layout& layout) {
+void draw_ui(FrameBuffer& buffer, const dungeon::map::Map& map, const Layout& layout,
+             const HudState& hud) {
     panel(buffer, layout.game, "DUNGEON");
     draw_map(buffer, map, layout.game);
 
     draw_stats(buffer, layout.stats, map.seed(), map.player());
     draw_inventory(buffer, layout.inventory, map.player());
+    draw_messages(buffer, layout.messages, hud.messages);
+    draw_chest(buffer, layout.chest, nearby_chest(map), hud.selected_chest_item);
 }
 
-void draw_ui(FrameBuffer& buffer, const dungeon::map::Map& map) {
-    draw_ui(buffer, map, make_layout(buffer.width(), buffer.height()));
+void draw_ui(FrameBuffer& buffer, const dungeon::map::Map& map, const Layout& layout) {
+    draw_ui(buffer, map, layout, HudState{});
+}
+
+void draw_ui(FrameBuffer& buffer, const dungeon::map::Map& map, const HudState& hud) {
+    draw_ui(buffer, map, make_layout(buffer.width(), buffer.height()), hud);
 }
 
 } // namespace dungeon::display::tui

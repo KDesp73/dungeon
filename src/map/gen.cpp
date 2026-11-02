@@ -15,19 +15,48 @@ namespace dungeon::map {
 
 namespace {
 
-EntityPtr make_item_entity(entities::ItemKind kind, std::size_t x, std::size_t y) {
+entities::Item make_loot_item(entities::ItemKind kind) {
     switch (kind) {
     case entities::ItemKind::Coin:
-        return std::make_shared<entities::Coin>(x, y);
+        return entities::Coin(0, 0);
     case entities::ItemKind::CoinDouble:
-        return std::make_shared<entities::CoinDouble>(x, y);
+        return entities::CoinDouble(0, 0);
+    case entities::ItemKind::Diamond:
+        return entities::Diamond(0, 0);
     case entities::ItemKind::Key:
-        return std::make_shared<entities::Key>(x, y);
+        return entities::Key(0, 0);
     case entities::ItemKind::Chest:
-        return std::make_shared<entities::Chest>(x, y);
+        break;
     }
 
-    return std::make_shared<entities::Coin>(x, y);
+    return entities::Coin(0, 0);
+}
+
+EntityPtr make_item_entity(const ItemSpec& item) {
+    if (item.kind == entities::ItemKind::Chest) {
+        auto chest = std::make_shared<entities::Chest>(item.x, item.y);
+
+        for (const entities::ItemKind kind : item.contents) {
+            chest->add(make_loot_item(kind));
+        }
+
+        return chest;
+    }
+
+    switch (item.kind) {
+    case entities::ItemKind::Coin:
+        return std::make_shared<entities::Coin>(item.x, item.y);
+    case entities::ItemKind::CoinDouble:
+        return std::make_shared<entities::CoinDouble>(item.x, item.y);
+    case entities::ItemKind::Diamond:
+        return std::make_shared<entities::Diamond>(item.x, item.y);
+    case entities::ItemKind::Key:
+        return std::make_shared<entities::Key>(item.x, item.y);
+    case entities::ItemKind::Chest:
+        break;
+    }
+
+    return std::make_shared<entities::Coin>(item.x, item.y);
 }
 
 } // namespace
@@ -558,6 +587,34 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height) {
 
     const std::size_t key_room = _chance.weighted(key_weights);
 
+    const auto roll_chest_contents = [this]() {
+        std::vector<entities::ItemKind> contents;
+        const std::size_t count =
+            _chance.range(chance::CHEST_LOOT_MIN, chance::CHEST_LOOT_MAX);
+        contents.reserve(count);
+
+        for (std::size_t i = 0; i < count; ++i) {
+            contents.push_back(_chance.roll(chance::CHEST_LOOT_DOUBLE_COIN)
+                                   ? entities::ItemKind::CoinDouble
+                                   : entities::ItemKind::Coin);
+        }
+
+        return contents;
+    };
+
+    const auto make_item_spec = [&roll_chest_contents](entities::ItemKind kind, Point cell) {
+        ItemSpec item;
+        item.kind = kind;
+        item.x    = cell.x;
+        item.y    = cell.y;
+
+        if (kind == entities::ItemKind::Chest) {
+            item.contents = roll_chest_contents();
+        }
+
+        return item;
+    };
+
     for (std::size_t room_index = 0; room_index < spec.rooms.size(); ++room_index) {
         const RoomSpec&    room = spec.rooms[room_index];
         std::vector<Point> free_cells;
@@ -582,7 +639,7 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height) {
                 free_cells.pop_back();
             }
 
-            spec.items.push_back(ItemSpec{entities::ItemKind::Key, cell.x, cell.y});
+            spec.items.push_back(make_item_spec(entities::ItemKind::Key, cell));
         }
 
         for (const chance::ItemSpawn& spawn : chance::ITEM_SPAWNS) {
@@ -596,7 +653,7 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height) {
             const std::size_t index = _chance.range(0, free_cells.size() - 1);
             const Point       cell  = free_cells[index];
 
-            spec.items.push_back(ItemSpec{spawn.kind, cell.x, cell.y});
+            spec.items.push_back(make_item_spec(spawn.kind, cell));
             free_cells[index] = free_cells.back();
             free_cells.pop_back();
         }
@@ -659,7 +716,7 @@ void Map::generate(const MapSpec& spec) {
 
     for (const ItemSpec& item : spec.items) {
         if (item.x < _width && item.y < _height && at(item.x, item.y) == Tile::Floor) {
-            add(make_item_entity(item.kind, item.x, item.y));
+            add(make_item_entity(item));
         }
     }
 }

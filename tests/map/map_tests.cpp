@@ -71,6 +71,7 @@ char item_glyph(ItemKind kind)
     switch (kind) {
     case ItemKind::Coin:
     case ItemKind::CoinDouble:
+    case ItemKind::Diamond:
         return '$';
     case ItemKind::Key:
         return 'k';
@@ -444,6 +445,47 @@ DUNGEON_TEST(map, generate_places_items_from_the_spec)
 
     for (const dungeon::map::ItemSpec& item : spec.items) {
         CHECK(has_entity_at(map, item_glyph(item.kind), item.x, item.y));
+    }
+}
+
+DUNGEON_TEST(map, generate_builds_chest_contents_from_the_spec)
+{
+    MapSpec spec;
+    spec.width    = 20;
+    spec.height   = 10;
+    spec.rooms    = {{2, 2, 6, 5}};
+    spec.entrance = {3, 3};
+    spec.items    = {{ItemKind::Chest, 4, 3, {ItemKind::Coin, ItemKind::CoinDouble}}};
+
+    Map map;
+    map.generate(spec);
+
+    const dungeon::map::entities::Chest* chest = nullptr;
+    for (const dungeon::map::EntityPtr& entity : map.entity_ptrs()) {
+        if (const auto* candidate =
+                dynamic_cast<const dungeon::map::entities::Chest*>(entity.get())) {
+            chest = candidate;
+        }
+    }
+
+    REQUIRE(chest != nullptr);
+    REQUIRE(chest->contents().size() == 2U);
+    CHECK(chest->contents()[0].kind() == ItemKind::Coin);
+    CHECK(chest->contents()[1].kind() == ItemKind::CoinDouble);
+}
+
+DUNGEON_TEST(map, make_spec_rolls_loot_for_every_chest)
+{
+    Map map;
+
+    for (int run = 0; run < 100; ++run) {
+        const MapSpec spec = map.make_spec();
+
+        for (const dungeon::map::ItemSpec& item : spec.items) {
+            if (item.kind == ItemKind::Chest) {
+                CHECK(!item.contents.empty());
+            }
+        }
     }
 }
 

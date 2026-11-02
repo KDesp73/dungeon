@@ -56,9 +56,29 @@ int main() {
 
         if (const auto direction = dungeon::game::direction_from_key(key)) {
             static_cast<void>(game.move(*direction));
+        } else if (key.kind == dungeon::controls::KeyKind::Character) {
+            switch (key.value) {
+            case '[':
+                game.cycle_chest_selection(-1);
+                break;
+            case ']':
+                game.cycle_chest_selection(1);
+                break;
+            case '\r':
+            case '\n':
+                static_cast<void>(game.take_selected_chest_item());
+                break;
+            default:
+                if (key.value >= '1' && key.value <= '9') {
+                    game.select_chest_item(static_cast<std::size_t>(key.value - '1'));
+                }
+                break;
+            }
         }
 
-        dungeon::display::tui::draw_ui(buffer, game.map(), layout);
+        const dungeon::display::tui::HudState hud{
+            game.messages(), game.chest_selection()};
+        dungeon::display::tui::draw_ui(buffer, game.map(), layout, hud);
         buffer.present();
 
         if (g_running) {

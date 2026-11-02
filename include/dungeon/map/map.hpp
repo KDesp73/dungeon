@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <memory>
 #include <random>
+#include <utility>
 #include <vector>
 
 namespace dungeon::map {
@@ -64,10 +65,22 @@ struct ConnectionSpec {
 };
 
 /// One item the generator places inside a room.
+///
+/// `contents` is only used by chests and describes the loot placed inside.
 struct ItemSpec {
-    entities::ItemKind kind = entities::ItemKind::Coin;
-    std::size_t        x    = 0;
-    std::size_t        y    = 0;
+    entities::ItemKind              kind = entities::ItemKind::Coin;
+    std::size_t                     x    = 0;
+    std::size_t                     y    = 0;
+    std::vector<entities::ItemKind> contents;
+
+    ItemSpec() = default;
+
+    ItemSpec(entities::ItemKind item_kind, std::size_t item_x, std::size_t item_y)
+        : kind(item_kind), x(item_x), y(item_y) {}
+
+    ItemSpec(entities::ItemKind item_kind, std::size_t item_x, std::size_t item_y,
+             std::vector<entities::ItemKind> item_contents)
+        : kind(item_kind), x(item_x), y(item_y), contents(std::move(item_contents)) {}
 };
 
 /// Complete description of a generated dungeon.

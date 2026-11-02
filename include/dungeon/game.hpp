@@ -6,7 +6,9 @@
 #include <cstddef>
 #include <functional>
 #include <optional>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace dungeon::game {
 
@@ -101,12 +103,39 @@ class Game {
     [[nodiscard]] map::entities::Player*       player() noexcept { return _map.player(); }
     [[nodiscard]] const map::entities::Player* player() const noexcept { return _map.player(); }
 
+    /// Messages produced by gameplay, oldest first.
+    [[nodiscard]] const std::vector<std::string>& messages() const noexcept { return _messages; }
+
+    /// The chest the player is standing on or orthogonally next to.
+    ///
+    /// Returns `nullptr` when no chest is in range.
+    [[nodiscard]] map::entities::Chest*       nearby_chest() noexcept;
+    [[nodiscard]] const map::entities::Chest* nearby_chest() const noexcept;
+
+    /// Index of the chest item currently selected.
+    [[nodiscard]] std::size_t chest_selection() const noexcept { return _chest_selection; }
+
+    /// Moves the chest selection forward or backward, wrapping around.
+    ///
+    /// Does nothing when there is no chest in range. A selection of zero is
+    /// kept while the chest is empty.
+    void cycle_chest_selection(int delta) noexcept;
+
+    /// Selects the chest item at @p index, clamped to the available items.
+    void select_chest_item(std::size_t index) noexcept;
+
+    /// Moves the selected chest item into the player's inventory or purse.
+    ///
+    /// Coins and diamonds add gold directly; other items are equipped by the
+    /// player. Returns false when no chest is in range or the chest is empty.
+    [[nodiscard]] bool take_selected_chest_item();
+
   private:
     /// Applies the built-in effect of stepping on @p event's item.
     ///
-    /// Coins are added to the player's gold and keys are equipped into the
-    /// inventory; both are removed from the map. Other items have no default
-    /// effect.
+    /// Coins and diamonds are added to the player's gold and keys are equipped
+    /// into the inventory; picked-up items are removed from the map. Chests have
+    /// no default step effect.
     void apply_step_action(const ActionEvent& event);
 
     /// Generates the next dungeon, consumes the key, and carries the player's
@@ -117,8 +146,14 @@ class Game {
     /// player stepped on or is standing next to.
     void dispatch_actions();
 
-    map::Map   _map;
-    ActionHook _action_hook;
+    /// Appends @p message to the message log, dropping the oldest entry when
+    /// the log is full.
+    void push_message(std::string message);
+
+    map::Map                 _map;
+    ActionHook               _action_hook;
+    std::vector<std::string> _messages;
+    std::size_t              _chest_selection = 0;
 };
 
 } // namespace dungeon::game

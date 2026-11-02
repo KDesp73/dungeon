@@ -17,16 +17,18 @@ hooks for items. Combat and enemy AI are still to come.
 | Build system | CMake presets, strict warnings, ASan/UBSan, CTest, GitHub Actions      |
 | Terminal     | `dungeon::display::tui::term_size()` reads the terminal dimensions     |
 | Map          | Rooms, doors, walkways, entrance/exit, and random item spawns; replay |
-| Rendering    | Double-buffered framebuffer with game, stats, and inventory panels    |
+| Rendering    | Double-buffered framebuffer with game, stats, inventory, message, and chest panels |
 | Tests        | Lightweight harness with `core`, `display`, `game`, and `map` suites  |
 | Gameplay     | WASD/arrow movement, cached player access, and item action hooks       |
 
 The executable currently prints the project version and run seed, then enters a
 fixed-timestep loop that draws the generated map in the left game viewport, a
-stats column on the right, and an inventory bar across the bottom. Simulation
-time advances at 60 ticks per second; rendering is paced to the next tick.
-`W`, `A`, `S`, and `D` or the arrow keys move the player one cell in the
-matching direction. Press `Esc` or `Ctrl+C` to quit.
+stats column on the right, and an inventory, message log, and chest panel across
+the bottom. Simulation time advances at 60 ticks per second; rendering is paced
+to the next tick. `W`, `A`, `S`, and `D` or the arrow keys move the player one
+cell in the matching direction. While next to a chest, `[` and `]` cycle through
+its items, `1`-`9` select one directly, and `Enter` takes the selected item.
+Press `Esc` or `Ctrl+C` to quit.
 
 ## Map output
 
@@ -39,7 +41,7 @@ Generated maps use these glyphs:
 | `#`      | walkway                           |
 | `+`      | door                              |
 | `@`      | player (placed at the entrance)   |
-| `E`      | unlocked exit                     |
+| `[`      | unlocked exit                     |
 | `$`      | coin                              |
 | `k`      | key                               |
 | `?`      | chest                             |
@@ -70,9 +72,15 @@ After every completed move the game scans for items and calls the installed
 
 Stepping on a coin adds its value to the player's gold and removes it from the
 map. Stepping on the key equips it into the player inventory and removes it from
-the map; while the key is equipped, the exit is shown as `E` and can be used.
-The stats panel reads the player's live stats, and the inventory bar shows the
+the map; while the key is equipped, the exit is shown as `[` and can be used.
+The stats panel reads the player's live stats, and the inventory panel shows the
 glyph of each equipped item.
+
+Chests are generated with their own loot. Standing on or next to a chest shows
+its contents in the bottom-right panel, where `[` and `]` cycle the selection,
+`1`-`9` select an item directly, and `Enter` takes it. Coins and diamonds add
+gold, while other items are equipped into the inventory. The middle panel shows
+a short log of gameplay messages such as pickups and level transitions.
 
 Stepping onto the unlocked exit generates a new dungeon at the same size and
 places the player at its entrance. The key is consumed by the exit, while the
