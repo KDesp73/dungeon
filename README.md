@@ -43,6 +43,7 @@ Generated maps use these glyphs:
 | `@`      | player (placed at the entrance)   |
 | `[`      | unlocked exit                     |
 | `$`      | coin                              |
+| `V`      | diamond                           |
 | `k`      | key                               |
 | `?`      | chest                             |
 | space    | empty space outside rooms         |
@@ -51,9 +52,9 @@ Every map has a seed exposed through `Map::seed()`; the executable prints it so
 a run can later be replayed once seed input is supported. `Map::make_spec()`
 returns a `MapSpec` containing the rooms, connections, entrance, exit, and
 random item spawns. Each dungeon contains exactly one key, biased away from the
-player's starting room and its neighbours. `Map::generate(const MapSpec&)`
-rebuilds that exact layout and places the player and items without regenerating
-anything randomly.
+player's starting room and its neighbours, and diamonds spawn rarely.
+`Map::generate(const MapSpec&)` rebuilds that exact layout and places the player
+and items without regenerating anything randomly.
 
 ## Movement and actions
 

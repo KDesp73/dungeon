@@ -13,6 +13,8 @@ inline constexpr double COIN = 0.6;
 inline constexpr double COIN_DOUBLE = 0.3;
 /// Probability that a room contains a chest.
 inline constexpr double CHEST = 0.2;
+/// Probability that a room contains a diamond.
+inline constexpr double DIAMOND = 0.05;
 /// Minimum number of items rolled into a generated chest.
 inline constexpr std::size_t CHEST_LOOT_MIN = 1;
 /// Maximum number of items rolled into a generated chest.
@@ -44,6 +46,7 @@ inline constexpr ItemSpawn ITEM_SPAWNS[] = {
     {entities::ItemKind::Coin, COIN},
     {entities::ItemKind::CoinDouble, COIN_DOUBLE},
     {entities::ItemKind::Chest, CHEST},
+    {entities::ItemKind::Diamond, DIAMOND},
 };
 
 class Chance {

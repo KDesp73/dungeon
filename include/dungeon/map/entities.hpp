@@ -159,7 +159,7 @@ class CoinDouble : public Item {
 class Diamond : public Item {
   public:
     Diamond(std::size_t x, std::size_t y)
-        : Item('$', Color::Cyan, Style::Bold, ItemType::Equipable, ItemKind::Diamond,
+        : Item('V', Color::Cyan, Style::Bold, ItemType::Equipable, ItemKind::Diamond,
                stat_delta(0, 0, 0, 10), x, y) {}
 };
 
