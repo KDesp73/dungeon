@@ -25,13 +25,6 @@ if(EMSCRIPTEN)
     set(CMAKE_EXECUTABLE_SUFFIX ".html")
 endif()
 
-# Conditionally include sanitizers only if NOT targeting Emscripten
-if(NOT EMSCRIPTEN)
-    include(Sanitizers)
-    dungeon_enable_sanitizers(dungeon_core)
-    dungeon_enable_sanitizers(dungeon)
-endif()
-
 set(DUNGEON_SANITIZE "none" CACHE STRING
     "Sanitizers to enable: none, address, undefined, address,undefined, thread")
 set_property(CACHE DUNGEON_SANITIZE PROPERTY STRINGS

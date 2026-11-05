@@ -122,10 +122,11 @@ DUNGEON_TEST(scene, manager_calls_enter_and_exit_for_the_stack) {
 }
 
 DUNGEON_TEST(scene, manager_replace_swaps_the_top_scene) {
-    SceneManager manager;
-
+    // Stats must outlive the manager, whose destructor calls on_exit().
     SceneStats first;
     SceneStats second;
+
+    SceneManager manager;
 
     manager.push(std::make_unique<StubScene>(first));
     manager.replace(std::make_unique<StubScene>(second));
@@ -136,11 +137,11 @@ DUNGEON_TEST(scene, manager_replace_swaps_the_top_scene) {
 }
 
 DUNGEON_TEST(scene, only_the_top_scene_receives_input) {
-    SceneManager manager;
-    SceneContext context{manager};
-
     SceneStats base;
     SceneStats overlay;
+
+    SceneManager manager;
+    SceneContext context{manager};
 
     manager.push(std::make_unique<StubScene>(base));
     manager.push(std::make_unique<StubScene>(overlay));
@@ -151,11 +152,11 @@ DUNGEON_TEST(scene, only_the_top_scene_receives_input) {
 }
 
 DUNGEON_TEST(scene, an_opaque_scene_freezes_scenes_below_it) {
-    SceneManager manager;
-    SceneContext context{manager};
-
     SceneStats base;
     SceneStats overlay;
+
+    SceneManager manager;
+    SceneContext context{manager};
 
     manager.push(std::make_unique<StubScene>(base));
     manager.push(std::make_unique<StubScene>(overlay));
@@ -167,11 +168,11 @@ DUNGEON_TEST(scene, an_opaque_scene_freezes_scenes_below_it) {
 }
 
 DUNGEON_TEST(scene, a_transparent_scene_updates_scenes_below_it) {
-    SceneManager manager;
-    SceneContext context{manager};
-
     SceneStats base;
     SceneStats overlay;
+
+    SceneManager manager;
+    SceneContext context{manager};
 
     manager.push(std::make_unique<StubScene>(base));
     manager.push(std::make_unique<StubScene>(overlay, true, true));
@@ -183,11 +184,11 @@ DUNGEON_TEST(scene, a_transparent_scene_updates_scenes_below_it) {
 }
 
 DUNGEON_TEST(scene, an_overlay_draws_scenes_below_it) {
-    SceneManager manager;
-    SceneContext context{manager};
-
     SceneStats base;
     SceneStats overlay;
+
+    SceneManager manager;
+    SceneContext context{manager};
 
     manager.push(std::make_unique<StubScene>(base));
     manager.push(std::make_unique<StubScene>(overlay, false, true));
@@ -200,11 +201,11 @@ DUNGEON_TEST(scene, an_overlay_draws_scenes_below_it) {
 }
 
 DUNGEON_TEST(scene, an_opaque_scene_hides_scenes_below_it) {
-    SceneManager manager;
-    SceneContext context{manager};
-
     SceneStats base;
     SceneStats overlay;
+
+    SceneManager manager;
+    SceneContext context{manager};
 
     manager.push(std::make_unique<StubScene>(base));
     manager.push(std::make_unique<StubScene>(overlay));
@@ -217,10 +218,10 @@ DUNGEON_TEST(scene, an_opaque_scene_hides_scenes_below_it) {
 }
 
 DUNGEON_TEST(scene, scene_changes_from_input_are_applied_after_the_dispatch) {
+    SceneStats next;
+
     SceneManager manager;
     SceneContext context{manager};
-
-    SceneStats next;
 
     manager.push(std::make_unique<ActionScene>([&next](SceneContext& scene_context) {
         scene_context.scenes.push(std::make_unique<StubScene>(next));
@@ -336,10 +337,10 @@ DUNGEON_TEST(scene, pause_scene_navigates_and_runs_option_actions) {
 }
 
 DUNGEON_TEST(scene, pause_scene_resumes_on_escape) {
+    SceneStats base;
+
     SceneManager manager;
     SceneContext context{manager};
-
-    SceneStats base;
 
     PauseSceneConfig config;
     config.title   = "PAUSED";
@@ -356,10 +357,10 @@ DUNGEON_TEST(scene, pause_scene_resumes_on_escape) {
 }
 
 DUNGEON_TEST(scene, pause_scene_freezes_the_scene_below_and_draws_its_controls) {
+    SceneStats base;
+
     SceneManager manager;
     SceneContext context{manager};
-
-    SceneStats base;
 
     PauseSceneConfig config;
     config.title    = "PAUSED";
