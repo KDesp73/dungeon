@@ -7,8 +7,9 @@ The long-term direction is ANSI-coloured character-cell rendering with a
 simulation kept independent from the presentation layer, so every gameplay
 rule can be unit tested. The current build provides the build and test
 scaffolding, terminal-size detection, procedural ASCII map generation, a
-three-panel game UI, a fixed-timestep loop, WASD player movement, and action
-hooks for items. Combat and enemy AI are still to come.
+three-panel game UI, a fixed-timestep loop, a scene stack with title and pause
+screens, WASD player movement, and action hooks for items. Combat and enemy AI
+are still to come.
 
 ## Status
 
@@ -18,20 +19,22 @@ hooks for items. Combat and enemy AI are still to come.
 | Terminal     | `dungeon::display::tui::term_size()` reads the terminal dimensions     |
 | Map          | Optional 3x3 room grid, orthogonal corridors, entrance/exit, item spawns |
 | Rendering    | Double-buffered framebuffer with game, stats, inventory, message, and chest panels |
-| Tests        | Lightweight harness with `core`, `display`, `game`, and `map` suites  |
+| Scenes       | Stack manager with title, game, and pause-menu scenes                  |
+| Tests        | Lightweight harness with `core`, `display`, `game`, `map`, and `scene` suites |
 | Gameplay     | WASD/arrow movement, cached player access, and item action hooks       |
 
 The executable accepts `--help`, `--version`, `--seed <n>`, and `--print-map`.
 `--seed` makes dungeon generation reproducible, and `--print-map` writes the
 generated dungeon to stdout, reports its seed on stderr, and exits. Without those
-options it prints the project version and run seed, then enters a fixed-timestep
-loop that draws the generated map in the left game viewport, a stats column on
-the right, and an inventory, message log, and chest panel across the bottom.
+options it opens the title screen; press `Enter` to start a run. The fixed-timestep
+loop draws the generated map in the left game viewport, a stats column on the
+right, and an inventory, message log, and chest panel across the bottom.
 Simulation time advances at 60 ticks per second; rendering is paced to the next
 tick. `W`, `A`, `S`, and `D` or the arrow keys move the player one cell in the
 matching direction. While next to a chest, `[` and `]` cycle through its items,
-`1`-`9` select one directly, and `Enter` takes the selected item. Press `Esc` or
-`Ctrl+C` to quit.
+`1`-`9` select one directly, and `Enter` takes the selected item. Press `Esc` to
+pause; the pause menu freezes the simulation, lists the controls, and offers
+Resume, Save game, and Quit. Press `Esc` again to resume or `Ctrl+C` to quit.
 
 ## Command line
 
@@ -163,12 +166,13 @@ ctest --preset dev --output-on-failure
 ./build/dev/tests/dungeon_tests --suite display   # run the framebuffer tests
 ./build/dev/tests/dungeon_tests --suite game      # run movement and action tests
 ./build/dev/tests/dungeon_tests --suite map       # run the map tests
+./build/dev/tests/dungeon_tests --suite scene     # run the scene-stack tests
 ./build/dev/tests/dungeon_tests --list             # list every test case
 ```
 
 Each subdirectory of `tests/` that contains test cases becomes one CTest
 entry; the suite name is the directory name. The current suites are `core`,
-`display`, `game`, and `map`.
+`display`, `game`, `map`, and `scene`.
 
 ## Sanitizers
 
@@ -194,11 +198,13 @@ dungeon/
 │   ├── core/                 fixed-timestep ticker and project version
 │   ├── display/              framebuffer, terminal size, and UI helpers
 │   ├── map/                  map generation and tile API
+│   ├── scene/                scene stack, title screen, game and pause scenes
 │   └── game.hpp              movement, direction, and action hooks
 ├── src/
 │   ├── core/                 ticker and version implementations
 │   ├── display/              framebuffer, terminal, and UI implementations
 │   ├── map/                  map generation, tiles, and text output
+│   ├── scene/                scene manager, title, game, and pause scenes
 │   ├── game.cpp              movement and action dispatch
 │   └── main.cpp              process entry point
 └── tests/
@@ -206,6 +212,7 @@ dungeon/
     ├── display/              display suite
     ├── game/                 movement and action suite
     ├── map/                  map suite
+    ├── scene/                scene-stack and pause-menu suite
     └── test_harness.*        lightweight test framework
 ```
 

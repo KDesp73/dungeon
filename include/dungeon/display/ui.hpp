@@ -55,6 +55,16 @@ struct HudState {
 void label(FrameBuffer& buffer, std::string_view text, std::size_t x, std::size_t y,
            CellStyle style = {});
 
+/// Returns the number of code points in @p text.
+[[nodiscard]] std::size_t text_width(std::string_view text) noexcept;
+
+/// Fills @p rect with @p glyph drawn in @p style.
+void fill(FrameBuffer& buffer, const Rect& rect, char32_t glyph = U' ', CellStyle style = {});
+
+/// Writes @p text centred horizontally inside @p rect on row @p y.
+void label_centered(FrameBuffer& buffer, std::string_view text, const Rect& rect, std::size_t y,
+                    CellStyle style = {});
+
 /// Draws a single-line border around @p rect.
 void box(FrameBuffer& buffer, const Rect& rect);
 

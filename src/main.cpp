@@ -4,7 +4,9 @@
 #include "dungeon/display/buffer.hpp"
 #include "dungeon/display/term.hpp"
 #include "dungeon/display/ui.hpp"
-#include "dungeon/game.hpp"
+#include "dungeon/scene/game_scene.hpp"
+#include "dungeon/scene/scene_manager.hpp"
+#include "dungeon/scene/title_scene.hpp"
 
 #include <CLI/CLI.hpp>
 
@@ -13,8 +15,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <memory>
+#include <optional>
 #include <string>
 #include <thread>
+#include <utility>
 
 namespace {
 
@@ -33,9 +38,9 @@ int main(int argc, char** argv) {
         std::string(dungeon::core::kProjectName) + ' ' + std::string(dungeon::core::kVersion);
     app.set_version_flag("-v,--version", version);
 
-    std::uint32_t      seed        = 0;
-    const CLI::Option* seed_option = app.add_option(
-        "-s,--seed", seed, "Seed used to generate the dungeon");
+    std::uint32_t      seed = 0;
+    const CLI::Option* seed_option =
+        app.add_option("-s,--seed", seed, "Seed used to generate the dungeon");
     bool print_map = false;
     app.add_flag("-p,--print-map", print_map, "Print a generated dungeon map and exit");
 
@@ -61,21 +66,37 @@ int main(int argc, char** argv) {
 
     std::signal(SIGINT, handle_interrupt);
 
-    auto game = dungeon::game::Game();
-    if (has_seed) {
-        game.map().reseed(seed);
-    }
-
     auto       buffer = dungeon::display::FrameBuffer();
     const auto layout = dungeon::display::tui::make_layout(buffer.width(), buffer.height());
 
     const std::size_t map_width  = layout.game.width > 2 ? layout.game.width - 2 : 0;
     const std::size_t map_height = layout.game.height > 2 ? layout.game.height - 2 : 0;
 
-    game.generate(map_width, map_height);
+    std::optional<std::uint32_t> seed_value;
+    if (has_seed) {
+        seed_value = seed;
+    }
 
-    std::cout << dungeon::core::kProjectName << ' ' << dungeon::core::kVersion << '\n'
-              << "Seed: " << game.map().seed() << '\n';
+    dungeon::scene::SceneManager scenes;
+    dungeon::scene::SceneContext context{scenes};
+
+    dungeon::scene::TitleSceneConfig title;
+    title.title = "DUNGEON";
+    title.subtitle =
+        std::string(dungeon::core::kProjectName) + ' ' + std::string(dungeon::core::kVersion);
+    title.prompt   = "Press ENTER to start";
+    title.hint     = "Esc to quit";
+    title.on_start = [map_width, map_height,
+                      seed_value](dungeon::scene::SceneContext& scene_context) {
+        dungeon::scene::GameSceneConfig config;
+        config.width  = map_width;
+        config.height = map_height;
+        config.seed   = seed_value;
+
+        scene_context.scenes.replace(
+            std::make_unique<dungeon::scene::GameScene>(std::move(config)));
+    };
+    scenes.push(std::make_unique<dungeon::scene::TitleScene>(std::move(title)));
 
     const auto tick_interval = std::chrono::duration_cast<dungeon::core::Ticker::Duration>(
         std::chrono::duration<double>(1.0 / 60.0));
@@ -83,43 +104,23 @@ int main(int argc, char** argv) {
 
     const dungeon::controls::TerminalSession terminal;
     dungeon::display::tui::hide_cursor();
-    while (g_running) {
+    while (g_running && !context.quit_requested) {
         const std::size_t updates = ticker.advance();
 
         for (std::size_t i = 0; i < updates; ++i) {
-            // update_game(ticker.interval());
+            scenes.update(ticker.interval(), context);
         }
 
         const dungeon::controls::KeyEvent key = dungeon::controls::poll_key();
-        if (key.kind == dungeon::controls::KeyKind::Escape) {
+        if (!key.is_none()) {
+            static_cast<void>(scenes.handle_key(key, context));
+        }
+
+        if (!g_running || context.quit_requested) {
             break;
         }
 
-        if (const auto direction = dungeon::game::direction_from_key(key)) {
-            static_cast<void>(game.move(*direction));
-        } else if (key.kind == dungeon::controls::KeyKind::Character) {
-            switch (key.value) {
-            case '[':
-                game.cycle_chest_selection(-1);
-                break;
-            case ']':
-                game.cycle_chest_selection(1);
-                break;
-            case '\r':
-            case '\n':
-                static_cast<void>(game.take_selected_chest_item());
-                break;
-            default:
-                if (key.value >= '1' && key.value <= '9') {
-                    game.select_chest_item(static_cast<std::size_t>(key.value - '1'));
-                }
-                break;
-            }
-        }
-
-        const dungeon::display::tui::HudState hud{
-            game.messages(), game.chest_selection()};
-        dungeon::display::tui::draw_ui(buffer, game.map(), layout, hud);
+        scenes.draw(buffer, context);
         buffer.present();
 
         if (g_running) {

@@ -195,8 +195,8 @@ void draw_messages(FrameBuffer& buffer, const Rect& rect, std::span<const std::s
     }
 }
 
-void draw_chest(FrameBuffer& buffer, const Rect& rect,
-                const dungeon::map::entities::Chest* chest, std::size_t selected) {
+void draw_chest(FrameBuffer& buffer, const Rect& rect, const dungeon::map::entities::Chest* chest,
+                std::size_t selected) {
     panel(buffer, rect, "CHEST");
 
     if (!has_border(rect) || rect.width <= 4) {
@@ -247,18 +247,18 @@ Layout make_layout(std::size_t width, std::size_t height) {
     layout.game      = Rect{0, 0, game_width, game_height};
     layout.stats     = Rect{game_width + kUiGap, 0, stats_width, game_height};
     layout.inventory = Rect{0, game_height + kUiGap, inventory_width, inventory_height};
-    layout.messages  = Rect{inventory_width + kUiGap, game_height + kUiGap, messages_width,
-                            inventory_height};
-    layout.chest     = Rect{inventory_width + kUiGap + messages_width + kUiGap,
-                            game_height + kUiGap, chest_width, inventory_height};
+    layout.messages =
+        Rect{inventory_width + kUiGap, game_height + kUiGap, messages_width, inventory_height};
+    layout.chest = Rect{inventory_width + kUiGap + messages_width + kUiGap, game_height + kUiGap,
+                        chest_width, inventory_height};
 
     return layout;
 }
 
 void label(FrameBuffer& buffer, std::string_view text, std::size_t x, std::size_t y,
            CellStyle style) {
-    std::size_t offset = 0;
-    std::size_t column = 0;
+    std::size_t offset    = 0;
+    std::size_t column    = 0;
     char32_t    codepoint = U'\0';
 
     while (offset < text.size()) {
@@ -271,6 +271,41 @@ void label(FrameBuffer& buffer, std::string_view text, std::size_t x, std::size_
         offset += consumed;
         ++column;
     }
+}
+
+std::size_t text_width(std::string_view text) noexcept {
+    std::size_t width     = 0;
+    std::size_t offset    = 0;
+    char32_t    codepoint = U'\0';
+
+    while (offset < text.size()) {
+        const std::size_t consumed = utf8::decode(text, offset, codepoint);
+        if (consumed == 0) {
+            break;
+        }
+
+        offset += consumed;
+        ++width;
+    }
+
+    return width;
+}
+
+void fill(FrameBuffer& buffer, const Rect& rect, char32_t glyph, CellStyle style) {
+    for (std::size_t y = rect.y; y < rect.y + rect.height; ++y) {
+        for (std::size_t x = rect.x; x < rect.x + rect.width; ++x) {
+            buffer.draw(x, y, glyph, style);
+        }
+    }
+}
+
+void label_centered(FrameBuffer& buffer, std::string_view text, const Rect& rect, std::size_t y,
+                    CellStyle style) {
+    const std::size_t width   = text_width(text);
+    const std::size_t visible = std::min(width, rect.width);
+    const std::size_t x       = rect.x + (rect.width > visible ? (rect.width - visible) / 2 : 0);
+
+    draw_clipped(buffer, text, x, y, visible, style);
 }
 
 void box(FrameBuffer& buffer, const Rect& rect) {
