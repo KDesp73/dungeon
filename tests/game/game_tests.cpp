@@ -175,6 +175,71 @@ DUNGEON_TEST(game, the_exit_unlocks_after_the_key_is_equipped) {
     CHECK(game.map().exit_unlocked());
 }
 
+DUNGEON_TEST(game, stepping_on_a_health_potion_stores_it_without_healing) {
+    MapSpec spec = make_test_spec();
+    spec.items   = {{ItemKind::HealthPotion, 4, 3}};
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+    game.player()->stats().hp = 50;
+
+    CHECK(game.move(Direction::Right));
+
+    CHECK_EQ(game.player()->stats().hp, 50);
+    CHECK(game.player()->has_item(ItemKind::HealthPotion));
+    REQUIRE(!game.player()->inventory().empty());
+    CHECK_EQ(game.player()->inventory().front().tile(), '!');
+    REQUIRE(!game.messages().empty());
+    CHECK_EQ(game.messages().back(), std::string("Health potion acquired."));
+}
+
+DUNGEON_TEST(game, using_a_health_potion_heals_a_random_amount_and_consumes_it) {
+    MapSpec spec = make_test_spec();
+    spec.items   = {{ItemKind::HealthPotion, 4, 3}};
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+    game.player()->stats().hp = 50;
+    REQUIRE(game.move(Direction::Right));
+    REQUIRE(game.player()->has_item(ItemKind::HealthPotion));
+
+    CHECK(game.use_health_potion());
+
+    const int hp = game.player()->stats().hp;
+    CHECK(hp >= 50 + dungeon::map::entities::HEALTH_POTION_HEAL_MIN);
+    CHECK(hp <= 50 + dungeon::map::entities::HEALTH_POTION_HEAL_MAX);
+    CHECK(!game.player()->has_item(ItemKind::HealthPotion));
+    REQUIRE(!game.messages().empty());
+    CHECK(game.messages().back().find("recover") != std::string::npos);
+}
+
+DUNGEON_TEST(game, a_health_potion_is_not_consumed_at_full_health) {
+    MapSpec spec = make_test_spec();
+    spec.items   = {{ItemKind::HealthPotion, 4, 3}};
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+    REQUIRE(game.move(Direction::Right));
+    REQUIRE(game.player()->has_item(ItemKind::HealthPotion));
+
+    CHECK(!game.use_health_potion());
+
+    CHECK_EQ(game.player()->stats().hp, dungeon::map::entities::PLAYER_MAX_HP);
+    CHECK(game.player()->has_item(ItemKind::HealthPotion));
+    REQUIRE(!game.messages().empty());
+    CHECK_EQ(game.messages().back(), std::string("You are already at full health."));
+}
+
+DUNGEON_TEST(game, using_a_health_potion_without_one_does_nothing) {
+    Game game(make_test_spec());
+    REQUIRE(game.player() != nullptr);
+
+    CHECK(!game.use_health_potion());
+
+    REQUIRE(!game.messages().empty());
+    CHECK_EQ(game.messages().back(), std::string("You have no health potions."));
+}
+
 DUNGEON_TEST(game, stepping_on_the_unlocked_exit_generates_a_new_map_and_keeps_player_state) {
     MapSpec spec;
     spec.width    = 80;
@@ -305,6 +370,21 @@ DUNGEON_TEST(game, taking_a_key_from_a_chest_equips_it) {
     CHECK(!game.player()->has_key());
     CHECK(game.take_selected_chest_item());
     CHECK(game.player()->has_key());
+    REQUIRE(game.nearby_chest() != nullptr);
+    CHECK(game.nearby_chest()->empty());
+}
+
+DUNGEON_TEST(game, taking_a_health_potion_from_a_chest_stores_it) {
+    MapSpec spec = make_test_spec();
+    spec.items   = {{ItemKind::Chest, 5, 3, {ItemKind::HealthPotion}}};
+
+    Game game(spec);
+    REQUIRE(game.move(Direction::Right));
+    REQUIRE(game.player() != nullptr);
+
+    CHECK(!game.player()->has_item(ItemKind::HealthPotion));
+    CHECK(game.take_selected_chest_item());
+    CHECK(game.player()->has_item(ItemKind::HealthPotion));
     REQUIRE(game.nearby_chest() != nullptr);
     CHECK(game.nearby_chest()->empty());
 }

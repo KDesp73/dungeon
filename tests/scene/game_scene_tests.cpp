@@ -69,6 +69,35 @@ DUNGEON_TEST(scene, game_scene_moves_the_player_and_collects_items) {
     CHECK_EQ(scene->game().player()->stats().gold, 1);
 }
 
+DUNGEON_TEST(scene, game_scene_uses_a_health_potion_with_h) {
+    SceneManager manager;
+    SceneContext context{manager};
+
+    MapSpec spec = make_test_spec();
+    spec.items   = {{dungeon::map::entities::ItemKind::HealthPotion, 4, 3}};
+
+    GameSceneConfig config;
+    config.layout = std::move(spec);
+
+    manager.push(std::make_unique<GameScene>(std::move(config)));
+
+    auto* scene = dynamic_cast<GameScene*>(manager.top());
+    REQUIRE(scene != nullptr);
+    REQUIRE(scene->game().player() != nullptr);
+
+    REQUIRE(manager.handle_key(KeyEvent::from_character('d'), context));
+    REQUIRE(scene->game().player()->has_item(dungeon::map::entities::ItemKind::HealthPotion));
+
+    scene->game().player()->stats().hp = 50;
+
+    CHECK(manager.handle_key(KeyEvent::from_character('h'), context));
+
+    const int hp = scene->game().player()->stats().hp;
+    CHECK(hp >= 50 + dungeon::map::entities::HEALTH_POTION_HEAL_MIN);
+    CHECK(hp <= 50 + dungeon::map::entities::HEALTH_POTION_HEAL_MAX);
+    CHECK(!scene->game().player()->has_item(dungeon::map::entities::ItemKind::HealthPotion));
+}
+
 DUNGEON_TEST(scene, game_scene_escape_opens_the_pause_menu) {
     SceneManager manager;
     SceneContext context{manager};

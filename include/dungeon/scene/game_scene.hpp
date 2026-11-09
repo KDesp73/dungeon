@@ -36,6 +36,7 @@ struct GameSceneConfig {
     std::string pause_controls = "Move:      W A S D / Arrow keys\n"
                                  "Pause:     Esc\n"
                                  "Attack:    move into an enemy\n"
+                                 "Potion:    H use health potion\n"
                                  "Chest:     [ ] cycle, 1-9 select\n"
                                  "Take item: Enter";
 

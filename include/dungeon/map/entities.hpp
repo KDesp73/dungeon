@@ -42,9 +42,16 @@ class Entity {
     int   _id;
 };
 
+/// Maximum health a player can have.
+inline constexpr int PLAYER_MAX_HP = 100;
+
+/// Health restored by a health potion, rolled in this inclusive range.
+inline constexpr int HEALTH_POTION_HEAL_MIN = 15;
+inline constexpr int HEALTH_POTION_HEAL_MAX = 30;
+
 struct Stats {
     std::size_t level   = 1;
-    int         hp      = 100;
+    int         hp      = PLAYER_MAX_HP;
     int         attack  = 10;
     int         defence = 5;
     int         stamina = 10;
@@ -198,6 +205,7 @@ enum class ItemKind : unsigned char {
     Key,
     Chest,
     Diamond,
+    HealthPotion,
 };
 
 class Item : public Entity {
@@ -262,6 +270,17 @@ class Diamond : public Item {
                stat_delta(0, 0, 0, 10), x, y) {}
 };
 
+/// A consumable that restores a random amount of health when used.
+///
+/// Potions are carried in the inventory until the player drinks one; they do
+/// not affect the player's stats when picked up.
+class HealthPotion : public Item {
+  public:
+    HealthPotion(std::size_t x, std::size_t y)
+        : Item('!', Color::BrightMagenta, Style::Bold, ItemType::Equipable,
+               ItemKind::HealthPotion, stat_delta(), x, y) {}
+};
+
 class Key : public Item {
   public:
     Key(std::size_t x, std::size_t y)
@@ -302,7 +321,7 @@ class Chest : public Item {
 class Player : public Entity, public Alive {
   public:
     Player(std::size_t x, std::size_t y)
-        : Entity('@', Color::White, Style::Bold, x, y), Alive(100, 15, 5, 10) {}
+        : Entity('@', Color::White, Style::Bold, x, y), Alive(PLAYER_MAX_HP, 15, 5, 10) {}
 
     [[nodiscard]] const std::vector<Item>& inventory() const noexcept { return _inventory; }
     [[nodiscard]] bool                     has_item(ItemKind kind) const;

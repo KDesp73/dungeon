@@ -8,7 +8,8 @@ simulation kept independent from the presentation layer, so every gameplay
 rule can be unit tested. The current build provides the build and test
 scaffolding, terminal-size detection, procedural ASCII map generation, a
 three-panel game UI, a fixed-timestep loop, a scene stack with title and pause
-screens, WASD player movement, action hooks for items, and enemy AI with combat.
+screens, WASD player movement, action hooks for items, enemy AI with combat,
+and consumable health potions.
 
 ## Status
 
@@ -20,7 +21,7 @@ screens, WASD player movement, action hooks for items, and enemy AI with combat.
 | Rendering    | Double-buffered framebuffer with game, stats, inventory, message, and chest panels |
 | Scenes       | Stack manager with title, game, and pause-menu scenes                  |
 | Tests        | Lightweight harness with `core`, `display`, `game`, `map`, and `scene` suites |
-| Gameplay     | WASD/arrow movement, item action hooks, enemy AI, combat, and coin drops |
+| Gameplay     | WASD/arrow movement, item action hooks, enemy AI, combat, coin drops, and health potions |
 
 The executable accepts `--help`, `--version`, `--seed <n>`, and `--print-map`.
 `--seed` makes dungeon generation reproducible, and `--print-map` writes the
@@ -32,9 +33,11 @@ Simulation time advances at 60 ticks per second; rendering is paced to the next
 tick. `W`, `A`, `S`, and `D` or the arrow keys move the player one cell in the
 matching direction. While next to a chest, `[` and `]` cycle through its items,
 `1`-`9` select one directly, and `Enter` takes the selected item. Move into an
-enemy to attack it. Press `Esc` to pause; the pause menu freezes the simulation,
-lists the controls, and offers Resume, Save game, and Quit. Press `Esc` again to
-resume or `Ctrl+C` to quit. When the player dies, press `R` to start a fresh run.
+enemy to attack it. While carrying a health potion, press `H` to drink one and
+recover a random amount of health. Press `Esc` to pause; the pause menu freezes
+the simulation, lists the controls, and offers Resume, Save game, and Quit.
+Press `Esc` again to resume or `Ctrl+C` to quit. When the player dies, press `R`
+to start a fresh run.
 
 ## Command line
 
@@ -66,6 +69,7 @@ Generated maps use these glyphs:
 | `$`      | coin                              |
 | `V`      | diamond                           |
 | `k`      | key                               |
+| `!`      | health potion                     |
 | `?`      | chest                             |
 | space    | empty space outside rooms         |
 
@@ -76,8 +80,10 @@ random item spawns. Rooms are placed on an optional 3x3 grid with slight random
 variation in size and position, and corridors only turn horizontally or
 vertically, so generated walkways never run diagonally. Each dungeon contains
 exactly one key, biased away from the player's starting room and its neighbours,
-and diamonds spawn rarely. Each room can also spawn rats, goblins, and ogres;
-the player's starting room is less likely to contain one. `Map::generate(const
+and diamonds spawn rarely. Rooms can also contain health potions. Each room can
+also spawn rats, goblins, and ogres; the player's starting room is less likely to
+contain one. A chest may contain the dungeon's key instead of it being placed
+directly in a room; in that case no second key is generated. `Map::generate(const
 MapSpec&)` rebuilds that exact layout and places the player, items, and enemies
 without regenerating anything randomly.
 
@@ -99,14 +105,18 @@ After every completed move the game scans for items and calls the installed
 Stepping on a coin adds its value to the player's gold and removes it from the
 map. Stepping on the key equips it into the player inventory and removes it from
 the map; while the key is equipped, the exit is shown as `[` and can be used.
+Stepping on a health potion adds it to the inventory without healing immediately.
+Pressing `H` drinks one, restores a random amount of health, and never raises
+health above its maximum; the potion is only consumed when it actually heals.
 The stats panel reads the player's live stats, and the inventory panel shows the
 glyph of each equipped item.
 
 Chests are generated with their own loot. Standing on or next to a chest shows
 its contents in the bottom-right panel, where `[` and `]` cycle the selection,
-`1`-`9` select an item directly, and `Enter` takes it. Coins and diamonds add
-gold, while other items are equipped into the inventory. The middle panel shows
-a short log of gameplay messages such as pickups and level transitions.
+`1`-`9` select an item directly, and `Enter` takes it. Chests can hold coins,
+diamonds, health potions, and the dungeon key. Coins and diamonds add gold, while
+other items are equipped into the inventory. The middle panel shows a short log
+of gameplay messages such as pickups and level transitions.
 
 Stepping onto the unlocked exit generates a new dungeon at the same size and
 places the player at its entrance. The key is consumed by the exit, while the

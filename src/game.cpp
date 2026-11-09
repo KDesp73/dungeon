@@ -38,6 +38,8 @@ std::string item_name(map::entities::ItemKind kind) {
         return "diamond";
     case map::entities::ItemKind::Key:
         return "key";
+    case map::entities::ItemKind::HealthPotion:
+        return "health potion";
     case map::entities::ItemKind::Chest:
         return "chest";
     }
@@ -263,6 +265,35 @@ const map::entities::Enemy* Game::nearest_enemy() const noexcept {
     }
 
     return nearest;
+}
+
+bool Game::use_health_potion() {
+    auto* player = _map.player();
+    if (player == nullptr || _game_over || !player->alive()) {
+        return false;
+    }
+
+    if (!player->has_item(map::entities::ItemKind::HealthPotion)) {
+        push_message("You have no health potions.");
+        return false;
+    }
+
+    const int hp = player->stats().hp;
+    if (hp >= map::entities::PLAYER_MAX_HP) {
+        push_message("You are already at full health.");
+        return false;
+    }
+
+    const auto rolled = _chance.range(
+        static_cast<std::size_t>(map::entities::HEALTH_POTION_HEAL_MIN),
+        static_cast<std::size_t>(map::entities::HEALTH_POTION_HEAL_MAX));
+    const int healed = std::min(static_cast<int>(rolled), map::entities::PLAYER_MAX_HP - hp);
+
+    player->stats().hp += healed;
+    player->drop(map::entities::ItemKind::HealthPotion);
+    push_message("You drink a health potion and recover " + std::to_string(healed) +
+                 " health.");
+    return true;
 }
 
 map::entities::Enemy* Game::enemy_at(std::size_t x, std::size_t y) noexcept {
@@ -640,6 +671,11 @@ void Game::apply_step_action(const ActionEvent& event) {
         event.player.equip(event.item);
         static_cast<void>(_map.remove(event.item.id()));
         push_message("Key acquired.");
+        break;
+    case map::entities::ItemKind::HealthPotion:
+        event.player.equip(event.item);
+        static_cast<void>(_map.remove(event.item.id()));
+        push_message("Health potion acquired.");
         break;
     case map::entities::ItemKind::Chest:
         break;

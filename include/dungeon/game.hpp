@@ -113,6 +113,14 @@ class Game {
     [[nodiscard]] map::entities::Enemy*       nearest_enemy() noexcept;
     [[nodiscard]] const map::entities::Enemy* nearest_enemy() const noexcept;
 
+    /// Drinks a health potion from the inventory.
+    ///
+    /// Restores a random amount of health without exceeding the player's
+    /// maximum. Returns false when no potion is carried, the player is already
+    /// at full health, or the run is over. A potion is only consumed on a
+    /// successful use.
+    [[nodiscard]] bool use_health_potion();
+
     /// Replaces the action hook. Passing an empty function disables it.
     void set_action_hook(ActionHook hook) { _action_hook = std::move(hook); }
 
@@ -153,9 +161,9 @@ class Game {
   private:
     /// Applies the built-in effect of stepping on @p event's item.
     ///
-    /// Coins and diamonds are added to the player's gold and keys are equipped
-    /// into the inventory; picked-up items are removed from the map. Chests have
-    /// no default step effect.
+    /// Coins and diamonds are added to the player's gold, while keys and health
+    /// potions are equipped into the inventory; picked-up items are removed from
+    /// the map. Chests have no default step effect.
     void apply_step_action(const ActionEvent& event);
 
     /// Generates the next dungeon, consumes the key, and carries the player's

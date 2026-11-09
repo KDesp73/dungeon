@@ -54,6 +54,10 @@ bool GameScene::handle_key(const controls::KeyEvent& key, SceneContext& context)
     }
 
     switch (key.value) {
+    case 'h':
+    case 'H':
+        static_cast<void>(_game.use_health_potion());
+        return true;
     case '[':
         _game.cycle_chest_selection(-1);
         return true;

@@ -15,12 +15,23 @@ inline constexpr double COIN_DOUBLE = 0.3;
 inline constexpr double CHEST = 0.2;
 /// Probability that a room contains a diamond.
 inline constexpr double DIAMOND = 0.05;
+/// Probability that a room contains a health potion.
+inline constexpr double HEALTH_POTION = 0.2;
 /// Minimum number of items rolled into a generated chest.
 inline constexpr std::size_t CHEST_LOOT_MIN = 1;
 /// Maximum number of items rolled into a generated chest.
 inline constexpr std::size_t CHEST_LOOT_MAX = 3;
 /// Probability that a chest loot roll is a double-value coin.
 inline constexpr double CHEST_LOOT_DOUBLE_COIN = 0.25;
+/// Probability that a chest loot roll is a health potion.
+inline constexpr double CHEST_LOOT_HEALTH_POTION = 0.15;
+/// Probability that a chest loot roll is a diamond.
+inline constexpr double CHEST_LOOT_DIAMOND = 0.05;
+/// Probability that a chest loot roll is the dungeon key.
+///
+/// At most one key is placed in the whole dungeon, so this roll is skipped once
+/// a chest already contains the key.
+inline constexpr double CHEST_LOOT_KEY = 0.1;
 /// Probability that a cell in the 3x3 room grid contains a room.
 inline constexpr double ROOM_PRESENT = 0.75;
 
@@ -61,6 +72,7 @@ inline constexpr ItemSpawn ITEM_SPAWNS[] = {
     {entities::ItemKind::CoinDouble, COIN_DOUBLE},
     {entities::ItemKind::Chest, CHEST},
     {entities::ItemKind::Diamond, DIAMOND},
+    {entities::ItemKind::HealthPotion, HEALTH_POTION},
 };
 
 class Chance {

@@ -77,6 +77,8 @@ char item_glyph(ItemKind kind)
         return 'k';
     case ItemKind::Chest:
         return '?';
+    case ItemKind::HealthPotion:
+        return '!';
     }
     return '?';
 }
@@ -508,16 +510,51 @@ DUNGEON_TEST(map, make_spec_places_exactly_one_key)
 
     for (int run = 0; run < 50; ++run) {
         const MapSpec spec = map.make_spec();
-        std::size_t      key_count = 0;
+        std::size_t      direct_keys = 0;
+        std::size_t      chest_keys  = 0;
 
         for (const dungeon::map::ItemSpec& item : spec.items) {
             if (item.kind == ItemKind::Key) {
-                ++key_count;
+                ++direct_keys;
+            }
+
+            if (item.kind == ItemKind::Chest) {
+                for (const ItemKind content : item.contents) {
+                    if (content == ItemKind::Key) {
+                        ++chest_keys;
+                    }
+                }
             }
         }
 
-        CHECK_EQ(key_count, 1U);
+        CHECK_EQ(direct_keys + chest_keys, 1U);
+        CHECK(direct_keys == 0U || chest_keys == 0U);
     }
+}
+
+DUNGEON_TEST(map, a_chest_can_hold_the_only_key)
+{
+    Map map(8);
+    const MapSpec spec = map.make_spec(64, 32);
+    std::size_t direct_keys = 0;
+    std::size_t chest_keys  = 0;
+
+    for (const dungeon::map::ItemSpec& item : spec.items) {
+        if (item.kind == ItemKind::Key) {
+            ++direct_keys;
+        }
+
+        if (item.kind == ItemKind::Chest) {
+            for (const ItemKind content : item.contents) {
+                if (content == ItemKind::Key) {
+                    ++chest_keys;
+                }
+            }
+        }
+    }
+
+    CHECK_EQ(direct_keys, 0U);
+    CHECK_EQ(chest_keys, 1U);
 }
 
 DUNGEON_TEST(map, make_spec_spawns_enemies_inside_rooms)
@@ -627,7 +664,11 @@ DUNGEON_TEST(map, generate_builds_chest_contents_from_the_spec)
     spec.height   = 10;
     spec.rooms    = {{2, 2, 6, 5}};
     spec.entrance = {3, 3};
-    spec.items    = {{ItemKind::Chest, 4, 3, {ItemKind::Coin, ItemKind::CoinDouble}}};
+    spec.items    = {{ItemKind::Chest,
+                      4,
+                      3,
+                      {ItemKind::Coin, ItemKind::CoinDouble, ItemKind::Diamond,
+                       ItemKind::HealthPotion, ItemKind::Key}}};
 
     Map map;
     map.generate(spec);
@@ -641,9 +682,12 @@ DUNGEON_TEST(map, generate_builds_chest_contents_from_the_spec)
     }
 
     REQUIRE(chest != nullptr);
-    REQUIRE(chest->contents().size() == 2U);
+    REQUIRE(chest->contents().size() == 5U);
     CHECK(chest->contents()[0].kind() == ItemKind::Coin);
     CHECK(chest->contents()[1].kind() == ItemKind::CoinDouble);
+    CHECK(chest->contents()[2].kind() == ItemKind::Diamond);
+    CHECK(chest->contents()[3].kind() == ItemKind::HealthPotion);
+    CHECK(chest->contents()[4].kind() == ItemKind::Key);
 }
 
 DUNGEON_TEST(map, generate_builds_a_diamond_from_the_spec)
@@ -670,6 +714,32 @@ DUNGEON_TEST(map, generate_builds_a_diamond_from_the_spec)
 
     REQUIRE(diamond != nullptr);
     CHECK_EQ(diamond->gold(), 10);
+}
+
+DUNGEON_TEST(map, generate_builds_a_health_potion_from_the_spec)
+{
+    MapSpec spec;
+    spec.width    = 20;
+    spec.height   = 10;
+    spec.rooms    = {{2, 2, 6, 5}};
+    spec.entrance = {3, 3};
+    spec.items    = {{ItemKind::HealthPotion, 4, 3}};
+
+    Map map;
+    map.generate(spec);
+
+    CHECK(has_entity_at(map, '!', 4, 3));
+
+    const dungeon::map::entities::HealthPotion* potion = nullptr;
+    for (const dungeon::map::EntityPtr& entity : map.entity_ptrs()) {
+        if (const auto* candidate =
+                dynamic_cast<const dungeon::map::entities::HealthPotion*>(entity.get())) {
+            potion = candidate;
+        }
+    }
+
+    REQUIRE(potion != nullptr);
+    CHECK(potion->kind() == ItemKind::HealthPotion);
 }
 
 DUNGEON_TEST(map, make_spec_rolls_loot_for_every_chest)

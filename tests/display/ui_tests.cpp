@@ -122,6 +122,25 @@ DUNGEON_TEST(display, ui_shows_equipped_items_in_the_inventory) {
     CHECK_EQ(buffer.at(x + 2, y), ']');
 }
 
+DUNGEON_TEST(display, ui_shows_a_health_potion_in_the_inventory) {
+    MapSpec spec = make_key_spec();
+    spec.items   = {{ItemKind::HealthPotion, 4, 3}};
+
+    Game game(spec);
+    REQUIRE(game.move(Direction::Right));
+
+    FrameBuffer  buffer(100, 30);
+    const Layout layout = make_layout(buffer.width(), buffer.height());
+    dungeon::display::tui::draw_ui(buffer, game.map(), layout);
+
+    const std::size_t x = layout.inventory.x + 2;
+    const std::size_t y = layout.inventory.y + 2;
+
+    CHECK_EQ(buffer.at(x, y), '[');
+    CHECK_EQ(buffer.at(x + 1, y), '!');
+    CHECK_EQ(buffer.at(x + 2, y), ']');
+}
+
 DUNGEON_TEST(display, ui_shows_the_contents_of_a_nearby_chest) {
     MapSpec spec = make_key_spec();
     spec.items   = {{ItemKind::Chest,

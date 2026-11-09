@@ -26,6 +26,8 @@ entities::Item make_loot_item(entities::ItemKind kind) {
         return entities::Diamond(0, 0);
     case entities::ItemKind::Key:
         return entities::Key(0, 0);
+    case entities::ItemKind::HealthPotion:
+        return entities::HealthPotion(0, 0);
     case entities::ItemKind::Chest:
         break;
     }
@@ -53,6 +55,8 @@ EntityPtr make_item_entity(const ItemSpec& item) {
         return std::make_shared<entities::Diamond>(item.x, item.y);
     case entities::ItemKind::Key:
         return std::make_shared<entities::Key>(item.x, item.y);
+    case entities::ItemKind::HealthPotion:
+        return std::make_shared<entities::HealthPotion>(item.x, item.y);
     case entities::ItemKind::Chest:
         break;
     }
@@ -464,16 +468,27 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height) {
 
     const std::size_t key_room = _chance.weighted(key_weights);
 
-    const auto roll_chest_contents = [this]() {
+    bool key_in_chest = false;
+
+    const auto roll_chest_contents = [this, &key_in_chest]() {
         std::vector<entities::ItemKind> contents;
         const std::size_t count =
             _chance.range(chance::CHEST_LOOT_MIN, chance::CHEST_LOOT_MAX);
         contents.reserve(count);
 
         for (std::size_t i = 0; i < count; ++i) {
-            contents.push_back(_chance.roll(chance::CHEST_LOOT_DOUBLE_COIN)
-                                   ? entities::ItemKind::CoinDouble
-                                   : entities::ItemKind::Coin);
+            if (!key_in_chest && _chance.roll(chance::CHEST_LOOT_KEY)) {
+                contents.push_back(entities::ItemKind::Key);
+                key_in_chest = true;
+            } else if (_chance.roll(chance::CHEST_LOOT_HEALTH_POTION)) {
+                contents.push_back(entities::ItemKind::HealthPotion);
+            } else if (_chance.roll(chance::CHEST_LOOT_DIAMOND)) {
+                contents.push_back(entities::ItemKind::Diamond);
+            } else if (_chance.roll(chance::CHEST_LOOT_DOUBLE_COIN)) {
+                contents.push_back(entities::ItemKind::CoinDouble);
+            } else {
+                contents.push_back(entities::ItemKind::Coin);
+            }
         }
 
         return contents;
@@ -558,6 +573,17 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height) {
                 free_cells[index] = free_cells.back();
                 free_cells.pop_back();
             }
+        }
+    }
+
+    if (key_in_chest) {
+        const auto direct_key =
+            std::find_if(spec.items.begin(), spec.items.end(), [](const ItemSpec& item) {
+                return item.kind == entities::ItemKind::Key;
+            });
+
+        if (direct_key != spec.items.end()) {
+            spec.items.erase(direct_key);
         }
     }
 
