@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <string_view>
 
@@ -92,6 +93,49 @@ const dungeon::map::entities::Chest* nearby_chest(const dungeon::map::Map& map) 
     return nullptr;
 }
 
+/// Returns the living enemy closest to the player.
+const dungeon::map::entities::Enemy* nearest_enemy(const dungeon::map::Map& map) {
+    const auto* player = map.player();
+    if (player == nullptr) {
+        return nullptr;
+    }
+
+    const dungeon::map::entities::Enemy* nearest = nullptr;
+    std::size_t                         best    = std::numeric_limits<std::size_t>::max();
+
+    for (const dungeon::map::EntityPtr& entity : map.entity_ptrs()) {
+        const auto* enemy = dynamic_cast<const dungeon::map::entities::Enemy*>(entity.get());
+        if (enemy == nullptr || !enemy->alive()) {
+            continue;
+        }
+
+        const std::size_t dx = enemy->x > player->x ? enemy->x - player->x : player->x - enemy->x;
+        const std::size_t dy = enemy->y > player->y ? enemy->y - player->y : player->y - enemy->y;
+        const std::size_t distance = dx + dy;
+
+        if (distance < best) {
+            best    = distance;
+            nearest = enemy;
+        }
+    }
+
+    return nearest;
+}
+
+/// Counts the living enemies on @p map.
+std::size_t enemy_count(const dungeon::map::Map& map) {
+    std::size_t count = 0;
+
+    for (const dungeon::map::EntityPtr& entity : map.entity_ptrs()) {
+        const auto* enemy = dynamic_cast<const dungeon::map::entities::Enemy*>(entity.get());
+        if (enemy != nullptr && enemy->alive()) {
+            ++count;
+        }
+    }
+
+    return count;
+}
+
 /// Draws item slots in the style shared by the inventory and chest panels.
 void draw_item_slots(FrameBuffer& buffer, const Rect& rect,
                      const std::vector<dungeon::map::entities::Item>* items, std::size_t first,
@@ -124,7 +168,8 @@ void draw_item_slots(FrameBuffer& buffer, const Rect& rect,
 }
 
 void draw_stats(FrameBuffer& buffer, const Rect& rect, std::uint32_t seed,
-                const dungeon::map::entities::Player* player) {
+                const dungeon::map::entities::Player* player,
+                const dungeon::map::Map&              map) {
     panel(buffer, rect, "STATS");
 
     if (!has_border(rect) || rect.width <= 4) {
@@ -142,7 +187,7 @@ void draw_stats(FrameBuffer& buffer, const Rect& rect, std::uint32_t seed,
         if (row >= bottom) {
             return;
         }
-        label(buffer, text, left, row);
+        draw_clipped(buffer, text, left, row, rect.width - 4);
         ++row;
     };
 
@@ -155,6 +200,23 @@ void draw_stats(FrameBuffer& buffer, const Rect& rect, std::uint32_t seed,
     ++row;
     line("Seed:");
     line(std::to_string(seed));
+
+    ++row;
+    line("Enemies:  " + std::to_string(enemy_count(map)));
+
+    const dungeon::map::entities::Enemy* enemy = nearest_enemy(map);
+    if (enemy == nullptr) {
+        line("No enemies.");
+        return;
+    }
+
+    line(std::string(enemy->name()) + " (" + std::string(enemy->speed_label()) + ")");
+    line("HP:       " + std::to_string(enemy->stats().hp) + "/" +
+         std::to_string(enemy->max_hp()));
+    line("Attack:   " + std::to_string(enemy->stats().attack));
+    line("Defense:  " + std::to_string(enemy->stats().defence));
+    line("Bounty:   " + std::to_string(enemy->gold_min()) + "-" +
+         std::to_string(enemy->gold_max()));
 }
 
 void draw_inventory(FrameBuffer& buffer, const Rect& rect,
@@ -391,7 +453,7 @@ void draw_ui(FrameBuffer& buffer, const dungeon::map::Map& map, const Layout& la
     panel(buffer, layout.game, "DUNGEON");
     draw_map(buffer, map, layout.game);
 
-    draw_stats(buffer, layout.stats, map.seed(), map.player());
+    draw_stats(buffer, layout.stats, map.seed(), map.player(), map);
     draw_inventory(buffer, layout.inventory, map.player());
     draw_messages(buffer, layout.messages, hud.messages);
     draw_chest(buffer, layout.chest, nearby_chest(map), hud.selected_chest_item);

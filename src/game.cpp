@@ -2,6 +2,10 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <limits>
+#include <memory>
+#include <optional>
+#include <queue>
 #include <string>
 #include <utility>
 #include <vector>
@@ -10,11 +14,17 @@ namespace dungeon::game {
 
 namespace {
 
-/// Returns true when @p a and @p b are orthogonally adjacent.
-bool one_square_apart(const map::entities::Entity& a, const map::entities::Entity& b) noexcept {
+/// Returns the Manhattan distance between @p a and @p b.
+std::size_t grid_distance(const map::entities::Entity& a,
+                          const map::entities::Entity& b) noexcept {
     const std::size_t dx = a.x > b.x ? a.x - b.x : b.x - a.x;
     const std::size_t dy = a.y > b.y ? a.y - b.y : b.y - a.y;
-    return dx + dy == 1;
+    return dx + dy;
+}
+
+/// Returns true when @p a and @p b are orthogonally adjacent.
+bool one_square_apart(const map::entities::Entity& a, const map::entities::Entity& b) noexcept {
+    return grid_distance(a, b) == 1;
 }
 
 /// Returns a short human readable name for @p kind.
@@ -100,17 +110,31 @@ Game::Game(const map::MapSpec& spec) {
 
 void Game::generate(std::size_t width, std::size_t height) {
     _map.generate(width, height);
+    _chance.reseed(_map.seed());
+    _chest_selection = 0;
+    _game_over       = false;
     push_message("You enter the dungeon.");
 }
 
 void Game::generate(const map::MapSpec& spec) {
     _map.generate(spec);
+    _chance.reseed(_map.seed());
+    _chest_selection = 0;
+    _game_over       = false;
     push_message("You enter the dungeon.");
+}
+
+void Game::restart() {
+    const std::size_t width  = _map.width() > 0 ? _map.width() : 64;
+    const std::size_t height = _map.height() > 0 ? _map.height() : 32;
+
+    generate(width, height);
+    push_message("You feel refreshed.");
 }
 
 bool Game::move(Direction direction) {
     auto* player = _map.player();
-    if (player == nullptr) {
+    if (player == nullptr || _game_over || !player->alive()) {
         return false;
     }
 
@@ -124,6 +148,11 @@ bool Game::move(Direction direction) {
 
     const auto x = static_cast<std::size_t>(next_x);
     const auto y = static_cast<std::size_t>(next_y);
+
+    if (auto* enemy = enemy_at(x, y); enemy != nullptr) {
+        attack_enemy(*enemy);
+        return true;
+    }
 
     if (!_map.walkable(x, y)) {
         return false;
@@ -139,6 +168,325 @@ bool Game::move(Direction direction) {
     }
 
     return true;
+}
+
+void Game::update(double seconds) {
+    if (seconds <= 0.0 || _game_over) {
+        return;
+    }
+
+    auto* player = _map.player();
+    if (player == nullptr) {
+        return;
+    }
+
+    if (!player->alive()) {
+        _game_over = true;
+        return;
+    }
+
+    std::vector<map::entities::Enemy*> enemies;
+    enemies.reserve(_map.entity_ptrs().size());
+
+    for (const map::EntityPtr& entity : _map.entity_ptrs()) {
+        auto* enemy = dynamic_cast<map::entities::Enemy*>(entity.get());
+        if (enemy != nullptr && enemy->alive()) {
+            enemies.push_back(enemy);
+        }
+    }
+
+    for (map::entities::Enemy* enemy : enemies) {
+        if (enemy == nullptr || !enemy->alive()) {
+            continue;
+        }
+
+        enemy->advance_timers(seconds);
+
+        if (grid_distance(*enemy, *player) <=
+            static_cast<std::size_t>(enemy->profile().aggro_radius)) {
+            enemy->alert();
+        }
+
+        if (one_square_apart(*enemy, *player)) {
+            enemy->reset_move_timer();
+
+            if (enemy->attack_ready()) {
+                attack_player(*enemy);
+                enemy->reset_attack_timer();
+            }
+
+            if (_game_over) {
+                break;
+            }
+
+            continue;
+        }
+
+        if (!enemy->move_ready()) {
+            continue;
+        }
+
+        if (enemy->alerted()) {
+            chase_player(*enemy);
+        } else {
+            wander(*enemy);
+        }
+
+        enemy->reset_move_timer();
+    }
+}
+
+map::entities::Enemy* Game::nearest_enemy() noexcept {
+    return const_cast<map::entities::Enemy*>(std::as_const(*this).nearest_enemy());
+}
+
+const map::entities::Enemy* Game::nearest_enemy() const noexcept {
+    const auto* player = _map.player();
+    if (player == nullptr) {
+        return nullptr;
+    }
+
+    const map::entities::Enemy* nearest = nullptr;
+    std::size_t                 best    = std::numeric_limits<std::size_t>::max();
+
+    for (const map::EntityPtr& entity : _map.entity_ptrs()) {
+        const auto* enemy = dynamic_cast<const map::entities::Enemy*>(entity.get());
+        if (enemy == nullptr || !enemy->alive()) {
+            continue;
+        }
+
+        const std::size_t distance = grid_distance(*enemy, *player);
+        if (distance < best) {
+            best    = distance;
+            nearest = enemy;
+        }
+    }
+
+    return nearest;
+}
+
+map::entities::Enemy* Game::enemy_at(std::size_t x, std::size_t y) noexcept {
+    for (const map::EntityPtr& entity : _map.entity_ptrs()) {
+        auto* enemy = dynamic_cast<map::entities::Enemy*>(entity.get());
+        if (enemy != nullptr && enemy->alive() && enemy->x == x && enemy->y == y) {
+            return enemy;
+        }
+    }
+
+    return nullptr;
+}
+
+bool Game::occupied(std::size_t x, std::size_t y,
+                    const map::entities::Enemy* ignore) const noexcept {
+    const auto* player = _map.player();
+    if (player != nullptr && player->x == x && player->y == y) {
+        return true;
+    }
+
+    for (const map::EntityPtr& entity : _map.entity_ptrs()) {
+        const auto* enemy = dynamic_cast<const map::entities::Enemy*>(entity.get());
+        if (enemy != nullptr && enemy != ignore && enemy->alive() && enemy->x == x &&
+            enemy->y == y) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void Game::attack_enemy(map::entities::Enemy& enemy) {
+    auto* player = _map.player();
+    if (player == nullptr || !player->alive() || !enemy.alive()) {
+        return;
+    }
+
+    const int damage = std::max(1, player->stats().attack - enemy.stats().defence);
+    enemy.take_damage(damage);
+
+    if (enemy.alive()) {
+        push_message("You hit the " + std::string(enemy.name()) + " for " +
+                     std::to_string(damage) + ".");
+        return;
+    }
+
+    const std::size_t drop_x     = enemy.x;
+    const std::size_t drop_y     = enemy.y;
+    const std::string enemy_name = std::string(enemy.name());
+    const std::size_t coin_count = _chance.range(static_cast<std::size_t>(enemy.gold_min()),
+                                                 static_cast<std::size_t>(enemy.gold_max()));
+
+    static_cast<void>(_map.remove(enemy.id()));
+
+    for (std::size_t i = 0; i < coin_count; ++i) {
+        static_cast<void>(_map.add(std::make_shared<map::entities::Coin>(drop_x, drop_y)));
+    }
+
+    push_message("The " + enemy_name + " dies and drops " + std::to_string(coin_count) +
+                 (coin_count == 1 ? " coin." : " coins."));
+}
+
+void Game::attack_player(map::entities::Enemy& enemy) {
+    auto* player = _map.player();
+    if (player == nullptr || !player->alive()) {
+        return;
+    }
+
+    const int damage = std::max(1, enemy.stats().attack - player->stats().defence);
+    player->stats().hp -= damage;
+    if (player->stats().hp < 0) {
+        player->stats().hp = 0;
+    }
+
+    push_message("The " + std::string(enemy.name()) + " hits you for " +
+                 std::to_string(damage) + ".");
+
+    if (!player->alive() && !_game_over) {
+        _game_over = true;
+        push_message("You have fallen. Press R to restart.");
+    }
+}
+
+void Game::chase_player(map::entities::Enemy& enemy) {
+    auto* player = _map.player();
+    if (player == nullptr) {
+        return;
+    }
+
+    const std::optional<Offset> step =
+        first_step_toward(enemy.x, enemy.y, player->x, player->y, enemy);
+
+    if (!step) {
+        return;
+    }
+
+    const auto next_x = static_cast<std::ptrdiff_t>(enemy.x) + step->x;
+    const auto next_y = static_cast<std::ptrdiff_t>(enemy.y) + step->y;
+
+    if (next_x < 0 || next_y < 0) {
+        return;
+    }
+
+    const auto x = static_cast<std::size_t>(next_x);
+    const auto y = static_cast<std::size_t>(next_y);
+
+    if (!_map.walkable(x, y) || occupied(x, y, &enemy)) {
+        return;
+    }
+
+    enemy.place(x, y);
+}
+
+void Game::wander(map::entities::Enemy& enemy) {
+    constexpr int dx[4] = {0, 1, 0, -1};
+    constexpr int dy[4] = {-1, 0, 1, 0};
+
+    const int start = enemy.wander_direction() % 4;
+
+    for (int i = 0; i < 4; ++i) {
+        const int direction = (start + i) % 4;
+        const auto next_x   = static_cast<std::ptrdiff_t>(enemy.x) + dx[direction];
+        const auto next_y   = static_cast<std::ptrdiff_t>(enemy.y) + dy[direction];
+
+        if (next_x < 0 || next_y < 0) {
+            continue;
+        }
+
+        const auto x = static_cast<std::size_t>(next_x);
+        const auto y = static_cast<std::size_t>(next_y);
+
+        if (!_map.walkable(x, y) || occupied(x, y, &enemy)) {
+            continue;
+        }
+
+        enemy.place(x, y);
+        enemy.set_wander_direction(direction);
+        return;
+    }
+
+    enemy.set_wander_direction((start + 1) % 4);
+}
+
+std::optional<Offset> Game::first_step_toward(std::size_t start_x, std::size_t start_y,
+                                              std::size_t goal_x, std::size_t goal_y,
+                                              const map::entities::Enemy& mover) const {
+    if (start_x >= _map.width() || start_y >= _map.height() || goal_x >= _map.width() ||
+        goal_y >= _map.height()) {
+        return std::nullopt;
+    }
+
+    const std::size_t width      = _map.width();
+    const std::size_t cell_count = width * _map.height();
+    const std::size_t start      = start_y * width + start_x;
+    const std::size_t goal       = goal_y * width + goal_x;
+
+    if (start == goal) {
+        return std::nullopt;
+    }
+
+    constexpr int dx[4] = {0, 1, 0, -1};
+    constexpr int dy[4] = {-1, 0, 1, 0};
+
+    std::vector<std::ptrdiff_t> parent(cell_count, -1);
+    std::queue<std::size_t>     pending;
+
+    parent[start] = static_cast<std::ptrdiff_t>(start);
+    pending.push(start);
+
+    bool found = false;
+
+    while (!pending.empty() && !found) {
+        const std::size_t current = pending.front();
+        pending.pop();
+
+        const std::size_t x = current % width;
+        const std::size_t y = current / width;
+
+        for (int move = 0; move < 4; ++move) {
+            const auto next_x = static_cast<std::ptrdiff_t>(x) + dx[move];
+            const auto next_y = static_cast<std::ptrdiff_t>(y) + dy[move];
+
+            if (next_x < 0 || next_y < 0 || next_x >= static_cast<std::ptrdiff_t>(_map.width()) ||
+                next_y >= static_cast<std::ptrdiff_t>(_map.height())) {
+                continue;
+            }
+
+            const auto nx    = static_cast<std::size_t>(next_x);
+            const auto ny    = static_cast<std::size_t>(next_y);
+            const auto index = ny * width + nx;
+
+            if (parent[index] != -1 || !_map.walkable(nx, ny)) {
+                continue;
+            }
+
+            if (index != goal && occupied(nx, ny, &mover)) {
+                continue;
+            }
+
+            parent[index] = static_cast<std::ptrdiff_t>(current);
+            pending.push(index);
+
+            if (index == goal) {
+                found = true;
+                break;
+            }
+        }
+    }
+
+    if (!found) {
+        return std::nullopt;
+    }
+
+    std::size_t step = goal;
+
+    while (parent[step] != static_cast<std::ptrdiff_t>(start)) {
+        if (parent[step] < 0) {
+            return std::nullopt;
+        }
+        step = static_cast<std::size_t>(parent[step]);
+    }
+
+    return Offset{static_cast<int>(step % width) - static_cast<int>(start_x),
+                  static_cast<int>(step / width) - static_cast<int>(start_y)};
 }
 
 void Game::advance_level() {

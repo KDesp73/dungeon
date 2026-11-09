@@ -60,6 +60,10 @@ EntityPtr make_item_entity(const ItemSpec& item) {
     return std::make_shared<entities::Coin>(item.x, item.y);
 }
 
+EntityPtr make_enemy_entity(const EnemySpec& enemy) {
+    return std::make_shared<entities::Enemy>(enemy.kind, enemy.x, enemy.y);
+}
+
 } // namespace
 
 void Map::validate_room(std::size_t x, std::size_t y, std::size_t width, std::size_t height) const {
@@ -530,6 +534,31 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height) {
             free_cells[index] = free_cells.back();
             free_cells.pop_back();
         }
+
+        const double enemy_probability = room_index == entrance_room
+                                             ? chance::ENEMY_ENTRANCE_ROOM_PRESENT
+                                             : chance::ENEMY_ROOM_PRESENT;
+
+        if (!free_cells.empty() && _chance.roll(enemy_probability)) {
+            static constexpr double enemy_weights[] = {chance::FAST_ENEMY_WEIGHT,
+                                                       chance::NORMAL_ENEMY_WEIGHT,
+                                                       chance::BRUTE_ENEMY_WEIGHT};
+
+            const std::size_t enemy_count =
+                _chance.range(chance::ENEMY_MIN_PER_ROOM, chance::ENEMY_MAX_PER_ROOM);
+
+            for (std::size_t i = 0; i < enemy_count && !free_cells.empty(); ++i) {
+                const std::size_t index = _chance.range(0, free_cells.size() - 1);
+                const Point       cell  = free_cells[index];
+                const auto kind =
+                    static_cast<entities::EnemyKind>(_chance.weighted(enemy_weights));
+
+                spec.enemies.push_back(EnemySpec{kind, cell.x, cell.y});
+
+                free_cells[index] = free_cells.back();
+                free_cells.pop_back();
+            }
+        }
     }
 
     return spec;
@@ -588,6 +617,12 @@ void Map::generate(const MapSpec& spec) {
     for (const ItemSpec& item : spec.items) {
         if (item.x < _width && item.y < _height && at(item.x, item.y) == Tile::Floor) {
             add(make_item_entity(item));
+        }
+    }
+
+    for (const EnemySpec& enemy : spec.enemies) {
+        if (enemy.x < _width && enemy.y < _height && at(enemy.x, enemy.y) == Tile::Floor) {
+            add(make_enemy_entity(enemy));
         }
     }
 }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dungeon/controls.hpp"
+#include "dungeon/map/chance.hpp"
 #include "dungeon/map/map.hpp"
 
 #include <cstddef>
@@ -87,11 +88,30 @@ class Game {
 
     /// Moves the player one cell in @p direction.
     ///
-    /// Returns false when there is no player or the destination is not
-    /// walkable. A successful move dispatches the action hooks. Stepping onto
-    /// the unlocked exit generates a new dungeon and carries the player's
-    /// stats and inventory over to it.
+    /// Returns false when there is no player, the player is dead, or the
+    /// destination is not walkable. Moving into a living enemy attacks it
+    /// instead of moving. A successful move dispatches the action hooks.
+    /// Stepping onto the unlocked exit generates a new dungeon and carries the
+    /// player's stats and inventory over to it.
     [[nodiscard]] bool move(Direction direction);
+
+    /// Advances enemy movement and attacks by @p seconds of simulation time.
+    ///
+    /// Enemies wander independently until the player enters their aggro radius,
+    /// then chase him. An enemy adjacent to the player attacks whenever its
+    /// attack cooldown is ready. Calling this after the player has died does
+    /// nothing.
+    void update(double seconds);
+
+    /// Starts a fresh run in a newly generated dungeon of the same size.
+    void restart();
+
+    /// True once the player's health has reached zero.
+    [[nodiscard]] bool game_over() const noexcept { return _game_over; }
+
+    /// The living enemy closest to the player, or `nullptr` when none remain.
+    [[nodiscard]] map::entities::Enemy*       nearest_enemy() noexcept;
+    [[nodiscard]] const map::entities::Enemy* nearest_enemy() const noexcept;
 
     /// Replaces the action hook. Passing an empty function disables it.
     void set_action_hook(ActionHook hook) { _action_hook = std::move(hook); }
@@ -146,6 +166,39 @@ class Game {
     /// player stepped on or is standing next to.
     void dispatch_actions();
 
+    /// Attacks @p enemy with the player's current attack and removes it when
+    /// its health reaches zero. Dead enemies drop a randomized pile of coins.
+    void attack_enemy(map::entities::Enemy& enemy);
+
+    /// Makes @p enemy attack the player when it is orthogonally adjacent.
+    ///
+    /// Damage is the enemy's attack reduced by the player's defence, with a
+    /// minimum of one. Sets `game_over()` when the player's health reaches zero.
+    void attack_player(map::entities::Enemy& enemy);
+
+    /// Moves @p enemy one step toward the player using a breadth-first search
+    /// around walls and other enemies.
+    void chase_player(map::entities::Enemy& enemy);
+
+    /// Moves @p enemy in a deterministic wandering pattern when it has not
+    /// spotted the player.
+    void wander(map::entities::Enemy& enemy);
+
+    /// Returns the walkable first step on a path from (@p start_x, @p start_y)
+    /// to (@p goal_x, @p goal_y), or `std::nullopt` when no path exists.
+    [[nodiscard]] std::optional<Offset> first_step_toward(std::size_t start_x,
+                                                          std::size_t start_y,
+                                                          std::size_t goal_x,
+                                                          std::size_t goal_y,
+                                                          const map::entities::Enemy& mover) const;
+
+    /// Returns the living enemy standing on (@p x, @p y), or `nullptr`.
+    [[nodiscard]] map::entities::Enemy* enemy_at(std::size_t x, std::size_t y) noexcept;
+
+    /// Returns true when another enemy or the player occupies (@p x, @p y).
+    [[nodiscard]] bool occupied(std::size_t x, std::size_t y,
+                                const map::entities::Enemy* ignore = nullptr) const noexcept;
+
     /// Appends @p message to the message log, dropping the oldest entry when
     /// the log is full.
     void push_message(std::string message);
@@ -153,7 +206,9 @@ class Game {
     map::Map                 _map;
     ActionHook               _action_hook;
     std::vector<std::string> _messages;
+    map::chance::Chance      _chance;
     std::size_t              _chest_selection = 0;
+    bool                     _game_over       = false;
 };
 
 } // namespace dungeon::game

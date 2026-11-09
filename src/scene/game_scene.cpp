@@ -4,6 +4,7 @@
 #include "dungeon/scene/pause_scene.hpp"
 #include "dungeon/scene/scene_manager.hpp"
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <utility>
@@ -24,6 +25,20 @@ GameScene::GameScene(GameSceneConfig config) : _config(std::move(config)) {
 }
 
 bool GameScene::handle_key(const controls::KeyEvent& key, SceneContext& context) {
+    if (_game.game_over()) {
+        if (key.kind == controls::KeyKind::Character && (key.value == 'r' || key.value == 'R')) {
+            _game.restart();
+            return true;
+        }
+
+        if (key.kind == controls::KeyKind::Escape) {
+            open_pause_menu(context);
+            return true;
+        }
+
+        return false;
+    }
+
     if (key.kind == controls::KeyKind::Escape) {
         open_pause_menu(context);
         return true;
@@ -58,11 +73,28 @@ bool GameScene::handle_key(const controls::KeyEvent& key, SceneContext& context)
     }
 }
 
+void GameScene::update(Duration delta, SceneContext& /*context*/) {
+    if (_game.game_over()) {
+        return;
+    }
+
+    _game.update(std::chrono::duration<double>(delta).count());
+}
+
 void GameScene::draw(display::FrameBuffer& buffer, SceneContext& /*context*/) {
     const display::tui::Layout layout = display::tui::make_layout(buffer.width(), buffer.height());
     const display::tui::HudState hud{_game.messages(), _game.chest_selection()};
 
     display::tui::draw_ui(buffer, _game.map(), layout, hud);
+
+    if (_game.game_over()) {
+        const std::size_t row    = layout.game.y + layout.game.height / 2;
+        const display::CellStyle title{
+            display::Color::BrightRed, display::Color::Default, display::TextStyle::Bold};
+
+        display::tui::label_centered(buffer, "YOU DIED", layout.game, row, title);
+        display::tui::label_centered(buffer, "Press R to restart", layout.game, row + 1);
+    }
 }
 
 void GameScene::open_pause_menu(SceneContext& context) {

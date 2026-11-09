@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -81,10 +82,108 @@ class Alive {
     Stats _stats;
 };
 
+/// The enemy archetypes in the dungeon.
+///
+/// The archetypes trade speed against durability and damage: fast enemies are
+/// fragile and hit weakly, while slow enemies are tough and hit hard.
+enum class EnemyKind : unsigned char {
+    Fast,
+    Normal,
+    Brute,
+};
+
+/// Fixed stats and behaviour shared by every enemy of one kind.
+struct EnemyProfile {
+    std::string_view name;
+    char             glyph;
+    Color            color;
+    int              max_hp;
+    int              attack;
+    int              defence;
+    int              gold_min;
+    int              gold_max;
+    double           move_interval;
+    double           attack_interval;
+    int              aggro_radius;
+    std::string_view speed_label;
+};
+
+/// Fixed stats for every enemy archetype, indexed by `EnemyKind`.
+inline constexpr EnemyProfile kEnemyProfiles[] = {
+    // Ordered fastest to slowest. Bounty grows with the danger of the enemy.
+    {"Rat", 'r', Color::BrightGreen, 8, 2, 1, 1, 2, 0.22, 1.0, 7, "Fast"},
+    {"Goblin", 'g', Color::Yellow, 20, 5, 2, 2, 4, 0.45, 1.1, 6, "Normal"},
+    {"Ogre", 'O', Color::BrightRed, 50, 12, 4, 4, 8, 0.85, 1.4, 5, "Slow"},
+};
+
+/// Returns the profile for @p kind.
+[[nodiscard]] constexpr const EnemyProfile& enemy_profile(EnemyKind kind) noexcept {
+    return kEnemyProfiles[static_cast<std::size_t>(kind)];
+}
+
 class Enemy : public Entity, public Alive {
   public:
-    Enemy(std::size_t x, std::size_t y)
-        : Entity('&', Color::Red, Style::Bold, x, y), Alive(50, 8, 2, 5) {}
+    Enemy(EnemyKind kind, std::size_t x, std::size_t y)
+        : Entity(enemy_profile(kind).glyph, enemy_profile(kind).color, Style::Bold, x, y),
+          Alive(enemy_profile(kind).max_hp, enemy_profile(kind).attack,
+                enemy_profile(kind).defence, 0),
+          _kind(kind),
+          _max_hp(enemy_profile(kind).max_hp) {}
+
+    /// Creates a normal enemy. Kept for callers that do not care about the
+    /// archetype.
+    Enemy(std::size_t x, std::size_t y) : Enemy(EnemyKind::Normal, x, y) {}
+
+    [[nodiscard]] EnemyKind                kind() const noexcept { return _kind; }
+    [[nodiscard]] const EnemyProfile&      profile() const noexcept { return enemy_profile(_kind); }
+    [[nodiscard]] std::string_view         name() const noexcept { return profile().name; }
+    [[nodiscard]] int                      max_hp() const noexcept { return _max_hp; }
+    [[nodiscard]] std::string_view         speed_label() const noexcept {
+        return profile().speed_label;
+    }
+    [[nodiscard]] int gold_min() const noexcept { return profile().gold_min; }
+    [[nodiscard]] int gold_max() const noexcept { return profile().gold_max; }
+
+    /// Reduces the enemy's health, never below zero.
+    void take_damage(int damage) noexcept {
+        if (damage <= 0) {
+            return;
+        }
+
+        stats().hp = stats().hp > damage ? stats().hp - damage : 0;
+    }
+
+    /// Adds @p seconds to the enemy's movement and attack clocks.
+    void advance_timers(double seconds) noexcept {
+        _move_elapsed += seconds;
+        _attack_elapsed += seconds;
+    }
+
+    [[nodiscard]] bool move_ready() const noexcept {
+        return _move_elapsed >= profile().move_interval;
+    }
+
+    [[nodiscard]] bool attack_ready() const noexcept {
+        return _attack_elapsed >= profile().attack_interval;
+    }
+
+    void reset_move_timer() noexcept { _move_elapsed = 0.0; }
+    void reset_attack_timer() noexcept { _attack_elapsed = 0.0; }
+
+    /// True once the enemy has spotted the player and will chase.
+    [[nodiscard]] bool alerted() const noexcept { return _alerted; }
+    void               alert() noexcept { _alerted = true; }
+
+    [[nodiscard]] int  wander_direction() const noexcept { return _wander_direction; }
+    void set_wander_direction(int direction) noexcept { _wander_direction = direction; }
+
+  private:
+    EnemyKind _kind;
+    int       _max_hp;
+    double    _move_elapsed     = 0.0;
+    double    _attack_elapsed   = 0.0;
+    bool      _alerted          = false;
+    int       _wander_direction = 0;
 };
 
 enum class ItemType : unsigned char {

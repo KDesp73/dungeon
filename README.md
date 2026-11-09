@@ -8,8 +8,7 @@ simulation kept independent from the presentation layer, so every gameplay
 rule can be unit tested. The current build provides the build and test
 scaffolding, terminal-size detection, procedural ASCII map generation, a
 three-panel game UI, a fixed-timestep loop, a scene stack with title and pause
-screens, WASD player movement, and action hooks for items. Combat and enemy AI
-are still to come.
+screens, WASD player movement, action hooks for items, and enemy AI with combat.
 
 ## Status
 
@@ -21,7 +20,7 @@ are still to come.
 | Rendering    | Double-buffered framebuffer with game, stats, inventory, message, and chest panels |
 | Scenes       | Stack manager with title, game, and pause-menu scenes                  |
 | Tests        | Lightweight harness with `core`, `display`, `game`, `map`, and `scene` suites |
-| Gameplay     | WASD/arrow movement, cached player access, and item action hooks       |
+| Gameplay     | WASD/arrow movement, item action hooks, enemy AI, combat, and coin drops |
 
 The executable accepts `--help`, `--version`, `--seed <n>`, and `--print-map`.
 `--seed` makes dungeon generation reproducible, and `--print-map` writes the
@@ -32,9 +31,10 @@ right, and an inventory, message log, and chest panel across the bottom.
 Simulation time advances at 60 ticks per second; rendering is paced to the next
 tick. `W`, `A`, `S`, and `D` or the arrow keys move the player one cell in the
 matching direction. While next to a chest, `[` and `]` cycle through its items,
-`1`-`9` select one directly, and `Enter` takes the selected item. Press `Esc` to
-pause; the pause menu freezes the simulation, lists the controls, and offers
-Resume, Save game, and Quit. Press `Esc` again to resume or `Ctrl+C` to quit.
+`1`-`9` select one directly, and `Enter` takes the selected item. Move into an
+enemy to attack it. Press `Esc` to pause; the pause menu freezes the simulation,
+lists the controls, and offers Resume, Save game, and Quit. Press `Esc` again to
+resume or `Ctrl+C` to quit. When the player dies, press `R` to start a fresh run.
 
 ## Command line
 
@@ -60,6 +60,9 @@ Generated maps use these glyphs:
 | `+`      | door                              |
 | `@`      | player (placed at the entrance)   |
 | `[`      | unlocked exit                     |
+| `r`      | rat (fast enemy)                  |
+| `g`      | goblin (normal enemy)             |
+| `O`      | ogre (slow, tough enemy)          |
 | `$`      | coin                              |
 | `V`      | diamond                           |
 | `k`      | key                               |
@@ -73,8 +76,10 @@ random item spawns. Rooms are placed on an optional 3x3 grid with slight random
 variation in size and position, and corridors only turn horizontally or
 vertically, so generated walkways never run diagonally. Each dungeon contains
 exactly one key, biased away from the player's starting room and its neighbours,
-and diamonds spawn rarely. `Map::generate(const MapSpec&)` rebuilds that exact
-layout and places the player and items without regenerating anything randomly.
+and diamonds spawn rarely. Each room can also spawn rats, goblins, and ogres;
+the player's starting room is less likely to contain one. `Map::generate(const
+MapSpec&)` rebuilds that exact layout and places the player, items, and enemies
+without regenerating anything randomly.
 
 ## Movement and actions
 
@@ -110,6 +115,21 @@ player's stats and remaining inventory are carried over to the new map.
 An `ActionEvent` carries the trigger, the item, and the player. Hooks are
 installed with `Game::set_action_hook()`; an empty hook disables action
 dispatch. Built-in pickup effects still apply when no hook is installed.
+
+## Enemies and combat
+
+Enemies move on their own simulation clocks. They wander until the player enters
+their aggro radius and then chase him through the dungeon, using a breadth-first
+search so walls and other enemies do not trap them. An enemy beside the player
+attacks whenever its attack cooldown is ready; damage is reduced by the player's
+defence and is never lower than one.
+
+The three archetypes trade speed against danger. Rats are fast but fragile;
+goblins sit in the middle; ogres are slow, tough, and hit hard. Moving into an
+enemy attacks it with the player's attack reduced by its defence. Killed enemies
+drop a randomized number of coins on their cell, with tougher enemies dropping
+the largest bounties. The right-hand stats panel shows the living enemy nearest
+to the player, including its health, attack, defence, speed, and bounty range.
 
 ## Requirements
 

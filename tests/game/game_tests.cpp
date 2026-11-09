@@ -15,6 +15,7 @@ using dungeon::game::direction_from_key;
 using dungeon::game::Game;
 using dungeon::map::DoorSide;
 using dungeon::map::MapSpec;
+using dungeon::map::entities::EnemyKind;
 using dungeon::map::entities::ItemKind;
 
 namespace {
@@ -383,6 +384,142 @@ DUNGEON_TEST(game, moving_without_a_player_fails) {
 
     CHECK(game.player() == nullptr);
     CHECK(!game.move(Direction::Up));
+}
+
+DUNGEON_TEST(game, an_adjacent_enemy_attacks_the_player) {
+    MapSpec spec = make_test_spec();
+    spec.enemies = {{EnemyKind::Normal, 4, 3}};
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+    const int hp_before = game.player()->stats().hp;
+
+    game.update(2.0);
+
+    CHECK_EQ(game.player()->stats().hp, hp_before - 1);
+    CHECK(!game.game_over());
+    REQUIRE(!game.messages().empty());
+    CHECK_EQ(game.messages().back(), std::string("The Goblin hits you for 1."));
+}
+
+DUNGEON_TEST(game, a_distant_enemy_does_not_attack_until_it_reaches_the_player) {
+    MapSpec spec = make_test_spec();
+    spec.enemies = {{EnemyKind::Normal, 15, 3}};
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+    const int hp_before = game.player()->stats().hp;
+
+    game.update(0.1);
+
+    CHECK_EQ(game.player()->stats().hp, hp_before);
+}
+
+DUNGEON_TEST(game, an_alerted_enemy_chases_the_player) {
+    MapSpec spec;
+    spec.width    = 24;
+    spec.height   = 12;
+    spec.rooms    = {{1, 1, 22, 10}};
+    spec.entrance = {3, 5};
+    spec.exit     = {20, 8};
+    spec.enemies  = {{EnemyKind::Fast, 9, 5}};
+
+    Game game(spec);
+    const auto* enemy = game.nearest_enemy();
+    REQUIRE(enemy != nullptr);
+    CHECK_EQ(enemy->x, 9U);
+
+    game.update(0.3);
+
+    CHECK(game.nearest_enemy() != nullptr);
+    CHECK_EQ(game.nearest_enemy()->x, 8U);
+    CHECK_EQ(game.nearest_enemy()->y, 5U);
+    CHECK(game.nearest_enemy()->alerted());
+    CHECK_EQ(game.player()->stats().hp, 100);
+}
+
+DUNGEON_TEST(game, moving_into_an_enemy_attacks_it_and_drops_variable_coins) {
+    MapSpec spec = make_test_spec();
+    spec.enemies = {{EnemyKind::Fast, 4, 3}};
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+    const int gold_before = game.player()->stats().gold;
+
+    CHECK(game.move(Direction::Right));
+
+    CHECK(game.nearest_enemy() == nullptr);
+    CHECK_EQ(game.player()->x, spec.entrance.x);
+    CHECK_EQ(game.player()->y, spec.entrance.y);
+    REQUIRE(!game.messages().empty());
+    CHECK(game.messages().back().find("dies and drops") != std::string::npos);
+
+    std::size_t coins = 0;
+    for (const dungeon::map::EntityPtr& entity : game.map().entity_ptrs()) {
+        if (dynamic_cast<const dungeon::map::entities::Coin*>(entity.get()) != nullptr) {
+            ++coins;
+        }
+    }
+
+    CHECK(coins >= 1U);
+    CHECK(coins <= 2U);
+
+    CHECK(game.move(Direction::Right));
+    CHECK_EQ(game.player()->x, 4U);
+    CHECK_EQ(game.player()->y, 3U);
+    CHECK(game.player()->stats().gold >= gold_before + 1);
+    CHECK(game.player()->stats().gold <= gold_before + 2);
+}
+
+DUNGEON_TEST(game, a_brute_drops_more_coins_than_a_rat) {
+    MapSpec spec = make_test_spec();
+    spec.enemies = {{EnemyKind::Brute, 4, 3}};
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+
+    for (int hit = 0; hit < 5; ++hit) {
+        CHECK(game.move(Direction::Right));
+    }
+
+    CHECK(game.nearest_enemy() == nullptr);
+
+    std::size_t coins = 0;
+    for (const dungeon::map::EntityPtr& entity : game.map().entity_ptrs()) {
+        if (dynamic_cast<const dungeon::map::entities::Coin*>(entity.get()) != nullptr) {
+            ++coins;
+        }
+    }
+
+    CHECK(coins >= 4U);
+    CHECK(coins <= 8U);
+}
+
+DUNGEON_TEST(game, the_player_dies_when_an_enemy_reduces_health_to_zero) {
+    MapSpec spec;
+    spec.width    = 40;
+    spec.height   = 24;
+    spec.rooms    = {{1, 1, 38, 22}};
+    spec.entrance = {3, 3};
+    spec.exit     = {30, 12};
+    spec.enemies  = {{EnemyKind::Brute, 4, 3}};
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+    game.player()->stats().hp = 1;
+
+    game.update(2.0);
+
+    CHECK(game.game_over());
+    CHECK_EQ(game.player()->stats().hp, 0);
+    CHECK(!game.move(Direction::Right));
+
+    game.restart();
+
+    CHECK(!game.game_over());
+    REQUIRE(game.player() != nullptr);
+    CHECK(game.player()->alive());
+    CHECK_EQ(game.player()->stats().hp, 100);
 }
 
 DUNGEON_TEST(game, direction_from_key_maps_wasd_in_both_cases) {

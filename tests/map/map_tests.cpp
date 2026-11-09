@@ -15,6 +15,7 @@ using dungeon::map::MapSpec;
 using dungeon::map::Point;
 using dungeon::map::RoomSpec;
 using dungeon::map::Tile;
+using dungeon::map::entities::EnemyKind;
 using dungeon::map::entities::ItemKind;
 
 namespace {
@@ -519,6 +520,83 @@ DUNGEON_TEST(map, make_spec_places_exactly_one_key)
     }
 }
 
+DUNGEON_TEST(map, make_spec_spawns_enemies_inside_rooms)
+{
+    Map map;
+    std::size_t total_enemies = 0;
+
+    for (int run = 0; run < 30; ++run) {
+        const MapSpec spec = map.make_spec();
+        std::set<std::pair<std::size_t, std::size_t>> occupied;
+
+        for (const dungeon::map::ItemSpec& item : spec.items) {
+            static_cast<void>(occupied.insert({item.x, item.y}));
+        }
+
+        for (const dungeon::map::EnemySpec& enemy : spec.enemies) {
+            ++total_enemies;
+
+            bool inside = false;
+            for (const dungeon::map::RoomSpec& room : spec.rooms) {
+                inside = inside || inside_room(room, enemy.x, enemy.y);
+            }
+
+            CHECK(inside);
+            CHECK(!(enemy.x == spec.entrance.x && enemy.y == spec.entrance.y));
+            CHECK(!(enemy.x == spec.exit.x && enemy.y == spec.exit.y));
+            CHECK(occupied.insert({enemy.x, enemy.y}).second);
+        }
+    }
+
+    CHECK(total_enemies > 0);
+}
+
+DUNGEON_TEST(map, generate_places_enemies_from_the_spec)
+{
+    MapSpec spec;
+    spec.width    = 24;
+    spec.height   = 12;
+    spec.rooms    = {{2, 2, 20, 8}};
+    spec.entrance = {3, 3};
+    spec.exit     = {20, 8};
+    spec.enemies  = {{EnemyKind::Fast, 6, 4}, {EnemyKind::Normal, 9, 4},
+                     {EnemyKind::Brute, 12, 4}};
+
+    Map map;
+    map.generate(spec);
+
+    CHECK(has_entity_at(map, 'r', 6, 4));
+    CHECK(has_entity_at(map, 'g', 9, 4));
+    CHECK(has_entity_at(map, 'O', 12, 4));
+
+    std::size_t enemy_count = 0;
+    for (const dungeon::map::EntityPtr& entity : map.entity_ptrs()) {
+        if (dynamic_cast<const dungeon::map::entities::Enemy*>(entity.get()) != nullptr) {
+            ++enemy_count;
+        }
+    }
+
+    CHECK_EQ(enemy_count, spec.enemies.size());
+}
+
+DUNGEON_TEST(map, enemy_archetypes_trade_speed_for_durability)
+{
+    const auto& fast   = dungeon::map::entities::enemy_profile(EnemyKind::Fast);
+    const auto& normal = dungeon::map::entities::enemy_profile(EnemyKind::Normal);
+    const auto& brute  = dungeon::map::entities::enemy_profile(EnemyKind::Brute);
+
+    CHECK(fast.max_hp < normal.max_hp);
+    CHECK(normal.max_hp < brute.max_hp);
+    CHECK(fast.attack < normal.attack);
+    CHECK(normal.attack < brute.attack);
+    CHECK(fast.move_interval < normal.move_interval);
+    CHECK(normal.move_interval < brute.move_interval);
+    CHECK(fast.gold_max < brute.gold_min);
+    CHECK(fast.glyph != normal.glyph);
+    CHECK(normal.glyph != brute.glyph);
+    CHECK(fast.glyph != brute.glyph);
+}
+
 DUNGEON_TEST(map, generate_places_items_from_the_spec)
 {
     Map source;
@@ -527,7 +605,7 @@ DUNGEON_TEST(map, generate_places_items_from_the_spec)
     Map map;
     map.generate(spec);
 
-    CHECK_EQ(map.entities().size(), spec.items.size() + 1);
+    CHECK_EQ(map.entities().size(), spec.items.size() + spec.enemies.size() + 1);
 
     std::size_t key_count = 0;
     for (const dungeon::map::entities::Entity& entity : map.entities()) {

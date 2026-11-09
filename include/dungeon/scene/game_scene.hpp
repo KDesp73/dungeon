@@ -35,6 +35,7 @@ struct GameSceneConfig {
     /// Control reference shown by the pause menu.
     std::string pause_controls = "Move:      W A S D / Arrow keys\n"
                                  "Pause:     Esc\n"
+                                 "Attack:    move into an enemy\n"
                                  "Chest:     [ ] cycle, 1-9 select\n"
                                  "Take item: Enter";
 
@@ -51,6 +52,7 @@ class GameScene final : public Scene {
     explicit GameScene(GameSceneConfig config = {});
 
     bool handle_key(const controls::KeyEvent& key, SceneContext& context) override;
+    void update(Duration delta, SceneContext& context) override;
     void draw(display::FrameBuffer& buffer, SceneContext& context) override;
 
     [[nodiscard]] game::Game&       game() noexcept { return _game; }

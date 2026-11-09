@@ -17,6 +17,7 @@ using dungeon::game::Direction;
 using dungeon::game::Game;
 using dungeon::map::DoorSide;
 using dungeon::map::MapSpec;
+using dungeon::map::entities::EnemyKind;
 using dungeon::map::entities::ItemKind;
 
 namespace {
@@ -41,6 +42,18 @@ std::pair<std::size_t, std::size_t> map_origin(const Game& game, const Layout& l
 
     return {layout.game.x + 1 + (inner_width - map_width) / 2,
             layout.game.y + 1 + (inner_height - map_height) / 2};
+}
+
+std::string row_text(const FrameBuffer& buffer, std::size_t x, std::size_t y,
+                     std::size_t width) {
+    std::string text;
+    text.reserve(width);
+
+    for (std::size_t i = 0; i < width; ++i) {
+        text.push_back(buffer.at(x + i, y));
+    }
+
+    return text;
 }
 
 } // namespace
@@ -198,6 +211,42 @@ DUNGEON_TEST(display, ui_shows_gold_after_collecting_a_coin) {
     for (std::size_t i = 0; i < gold.size(); ++i) {
         CHECK_EQ(buffer.at(x + i, y), gold[i]);
     }
+}
+
+DUNGEON_TEST(display, ui_shows_the_nearest_enemy_stats_in_the_right_panel) {
+    MapSpec spec = make_key_spec();
+    spec.enemies = {{EnemyKind::Fast, 5, 3}};
+
+    Game game(spec);
+
+    FrameBuffer  buffer(100, 30);
+    const Layout layout = make_layout(buffer.width(), buffer.height());
+    dungeon::display::tui::draw_ui(buffer, game.map(), layout);
+
+    const std::size_t x = layout.stats.x + 2;
+    const std::size_t width = layout.stats.width - 4;
+
+    bool found_name    = false;
+    bool found_attack  = false;
+    bool found_defence = false;
+
+    for (std::size_t y = layout.stats.y + 1; y < layout.stats.y + layout.stats.height - 1; ++y) {
+        const std::string text = row_text(buffer, x, y, width);
+
+        if (text.find("Rat (Fast)") != std::string::npos) {
+            found_name = true;
+        }
+        if (text.find("Attack:   2") != std::string::npos) {
+            found_attack = true;
+        }
+        if (text.find("Defense:  1") != std::string::npos) {
+            found_defence = true;
+        }
+    }
+
+    CHECK(found_name);
+    CHECK(found_attack);
+    CHECK(found_defence);
 }
 
 DUNGEON_TEST(display, ui_marks_the_exit_after_the_key_is_equipped) {

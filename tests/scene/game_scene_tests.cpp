@@ -7,6 +7,7 @@
 #include "dungeon/scene/pause_scene.hpp"
 #include "dungeon/scene/scene_manager.hpp"
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <utility>
@@ -14,6 +15,7 @@
 using dungeon::controls::KeyEvent;
 using dungeon::controls::KeyKind;
 using dungeon::map::MapSpec;
+using dungeon::map::entities::EnemyKind;
 using dungeon::scene::GameScene;
 using dungeon::scene::GameSceneConfig;
 using dungeon::scene::PauseScene;
@@ -109,6 +111,59 @@ DUNGEON_TEST(scene, game_scene_pause_menu_saves_and_quits) {
     CHECK(manager.handle_key(KeyEvent::from_kind(KeyKind::Down), context));
     CHECK(manager.handle_key(KeyEvent::from_character('\n'), context));
     CHECK(context.quit_requested);
+}
+
+DUNGEON_TEST(scene, game_scene_updates_the_enemy_simulation) {
+    SceneManager manager;
+    SceneContext context{manager};
+
+    MapSpec spec = make_test_spec();
+    spec.enemies = {{EnemyKind::Normal, 4, 3}};
+
+    GameSceneConfig config;
+    config.layout = std::move(spec);
+
+    manager.push(std::make_unique<GameScene>(std::move(config)));
+
+    auto* scene = dynamic_cast<GameScene*>(manager.top());
+    REQUIRE(scene != nullptr);
+    REQUIRE(scene->game().player() != nullptr);
+    const int hp_before = scene->game().player()->stats().hp;
+
+    manager.update(std::chrono::milliseconds(2000), context);
+
+    CHECK_EQ(scene->game().player()->stats().hp, hp_before - 1);
+}
+
+DUNGEON_TEST(scene, game_scene_restarts_after_the_player_dies) {
+    SceneManager manager;
+    SceneContext context{manager};
+
+    MapSpec spec;
+    spec.width    = 40;
+    spec.height   = 24;
+    spec.rooms    = {{1, 1, 38, 22}};
+    spec.entrance = {3, 3};
+    spec.exit     = {30, 12};
+    spec.enemies  = {{EnemyKind::Brute, 4, 3}};
+
+    GameSceneConfig config;
+    config.layout = std::move(spec);
+
+    manager.push(std::make_unique<GameScene>(std::move(config)));
+
+    auto* scene = dynamic_cast<GameScene*>(manager.top());
+    REQUIRE(scene != nullptr);
+    REQUIRE(scene->game().player() != nullptr);
+    scene->game().player()->stats().hp = 1;
+
+    manager.update(std::chrono::milliseconds(2000), context);
+    REQUIRE(scene->game().game_over());
+
+    CHECK(manager.handle_key(KeyEvent::from_character('r'), context));
+    CHECK(!scene->game().game_over());
+    REQUIRE(scene->game().player() != nullptr);
+    CHECK(scene->game().player()->alive());
 }
 
 DUNGEON_TEST(scene, game_scene_pause_menu_reports_when_saving_is_unavailable) {

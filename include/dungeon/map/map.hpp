@@ -83,6 +83,18 @@ struct ItemSpec {
         : kind(item_kind), x(item_x), y(item_y), contents(std::move(item_contents)) {}
 };
 
+/// One enemy the generator places inside a room.
+struct EnemySpec {
+    entities::EnemyKind kind = entities::EnemyKind::Fast;
+    std::size_t         x    = 0;
+    std::size_t         y    = 0;
+
+    EnemySpec() = default;
+
+    EnemySpec(entities::EnemyKind enemy_kind, std::size_t enemy_x, std::size_t enemy_y)
+        : kind(enemy_kind), x(enemy_x), y(enemy_y) {}
+};
+
 /// Complete description of a generated dungeon.
 ///
 /// Create one with `Map::make_spec()` and pass it to
@@ -95,6 +107,7 @@ struct MapSpec {
     Point                       entrance;
     Point                       exit;
     std::vector<ItemSpec>       items;
+    std::vector<EnemySpec>      enemies;
 };
 
 inline const char32_t EXIT_GLYPH = '[';
