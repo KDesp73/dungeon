@@ -3,7 +3,7 @@
 #include <cstdio>
 #ifdef _WIN32
 #include <windows.h>
-#else
+#elif !defined(__EMSCRIPTEN__)
 #include <sys/ioctl.h>
 #include <unistd.h>
 #endif

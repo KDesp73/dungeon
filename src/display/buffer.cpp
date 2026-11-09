@@ -2,6 +2,10 @@
 
 #include "dungeon/display/utf8.hpp"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+#endif
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdio>
@@ -229,8 +233,20 @@ void FrameBuffer::present() {
 
     std::swap(_back_buffer, _front_buffer);
 
+#ifdef __EMSCRIPTEN__
+    // Hand the rendered ANSI frame to the browser shell, which writes it into
+    // xterm.js. Writing to stdout would only reach the developer console.
+    EM_ASM(
+        {
+            if (typeof Module !== 'undefined' && Module.dungeonWriteFrame) {
+                Module.dungeonWriteFrame(UTF8ToString($0, $1));
+            }
+        },
+        frame.data(), static_cast<int>(frame.size()));
+#else
     std::fwrite(frame.data(), sizeof(char), frame.size(), stdout);
     std::fflush(stdout);
+#endif
 
     std::fill(_back_buffer.begin(), _back_buffer.end(), Cell{});
 }

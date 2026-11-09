@@ -14,21 +14,20 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 option(DUNGEON_BUILD_TESTS "Build the unit test suite" ON)
 option(DUNGEON_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 
-if(EMSCRIPTEN)
-    # Sanitizers are generally not supported under Emscripten
-    set(DUNGEON_SANITIZE "none" CACHE STRING "" FORCE)
-
-    # Tell Emscripten to output an HTML wrapper page for testing
-    set(CMAKE_EXECUTABLE_SUFFIX ".html")
-
-    # Optional: Emscripten link flags (e.g., memory growth, preloading assets)
-    set(CMAKE_EXECUTABLE_SUFFIX ".html")
-endif()
-
 set(DUNGEON_SANITIZE "none" CACHE STRING
     "Sanitizers to enable: none, address, undefined, address,undefined, thread")
 set_property(CACHE DUNGEON_SANITIZE PROPERTY STRINGS
     none address undefined address,undefined thread)
+
+if(EMSCRIPTEN)
+    # Sanitizers and the unit tests are not usable in the browser build.
+    set(DUNGEON_SANITIZE "none" CACHE STRING "" FORCE)
+    set(DUNGEON_BUILD_TESTS OFF)
+
+    # Emscripten emits an HTML page alongside the JavaScript and WebAssembly
+    # output. `web/shell.html` supplies the xterm.js terminal around it.
+    set(CMAKE_EXECUTABLE_SUFFIX ".html")
+endif()
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Build type" FORCE)
@@ -77,27 +76,43 @@ dungeon_enable_sanitizers(dungeon_core)
 # dungeon: the executable
 # ---------------------------------------------------------------------------
 
-# CLI11 provides the command line parser. Prefer a system package when one is
-# available; otherwise CMake fetches a pinned release.
-find_package(CLI11 CONFIG QUIET)
-if(NOT CLI11_FOUND)
-    include(FetchContent)
-
-    set(CLI11_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(CLI11_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(CLI11_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-    set(CLI11_INSTALL OFF CACHE BOOL "" FORCE)
-
-    FetchContent_Declare(
-        CLI11
-        GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
-        GIT_TAG v2.7.2
-        GIT_SHALLOW TRUE)
-    FetchContent_MakeAvailable(CLI11)
-endif()
-
 add_executable(dungeon src/main.cpp)
-target_link_libraries(dungeon PRIVATE dungeon::core CLI11::CLI11)
+
+if(EMSCRIPTEN)
+    # The browser build has no command line, so CLI11 is neither fetched nor
+    # linked. Input arrives through the exported `dungeon_push_key` function
+    # called by `web/shell.html`.
+    target_link_libraries(dungeon PRIVATE dungeon::core)
+
+    target_link_options(dungeon PRIVATE
+        "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html"
+        "-sEXPORTED_FUNCTIONS=['_main','_dungeon_push_key']"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sEXIT_RUNTIME=0"
+        "-sENVIRONMENT=web"
+        "-sFORCE_FILESYSTEM=0")
+else()
+    # CLI11 provides the command line parser. Prefer a system package when one
+    # is available; otherwise CMake fetches a pinned release.
+    find_package(CLI11 CONFIG QUIET)
+    if(NOT CLI11_FOUND)
+        include(FetchContent)
+
+        set(CLI11_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+        set(CLI11_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set(CLI11_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+        set(CLI11_INSTALL OFF CACHE BOOL "" FORCE)
+
+        FetchContent_Declare(
+            CLI11
+            GIT_REPOSITORY https://github.com/CLIUtils/CLI11.git
+            GIT_TAG v2.7.2
+            GIT_SHALLOW TRUE)
+        FetchContent_MakeAvailable(CLI11)
+    endif()
+
+    target_link_libraries(dungeon PRIVATE dungeon::core CLI11::CLI11)
+endif()
 
 dungeon_set_warnings(dungeon)
 dungeon_enable_sanitizers(dungeon)

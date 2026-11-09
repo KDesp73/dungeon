@@ -4,6 +4,10 @@
 
 #ifdef _WIN32
 #include <conio.h>
+#elif defined(__EMSCRIPTEN__)
+#include <emscripten/emscripten.h>
+
+#include <deque>
 #else
 #include <poll.h>
 #include <termios.h>
@@ -15,7 +19,7 @@ namespace dungeon::controls {
 struct TerminalSession::Impl {
     bool active = false;
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__EMSCRIPTEN__)
     struct termios previous{};
 #endif
 };
@@ -72,6 +76,76 @@ KeyEvent poll_key() {
         return {};
     }
     return get_key_impl();
+}
+
+#elif defined(__EMSCRIPTEN__)
+
+namespace {
+
+/// Keys pushed by the browser shell, waiting to be consumed by the game loop.
+std::deque<KeyEvent> g_key_queue;
+
+/// Builds a key event from the browser's `(kind, value)` encoding.
+///
+/// Kind `0` is a printable character and carries its code point in `value`.
+/// Kinds `1` to `5` are the non-character keys the game understands.
+KeyEvent key_from_browser(int kind, int value) {
+    switch (kind) {
+    case 1:
+        return KeyEvent::from_kind(KeyKind::Up);
+    case 2:
+        return KeyEvent::from_kind(KeyKind::Down);
+    case 3:
+        return KeyEvent::from_kind(KeyKind::Left);
+    case 4:
+        return KeyEvent::from_kind(KeyKind::Right);
+    case 5:
+        return KeyEvent::from_kind(KeyKind::Escape);
+    default:
+        break;
+    }
+
+    return KeyEvent::from_character(static_cast<char>(value));
+}
+
+} // namespace
+
+extern "C" {
+
+/// Queues a key press sent by the JavaScript shell.
+///
+/// Called as `dungeon_push_key(kind, value)`. Non-character kinds are 1 = Up,
+/// 2 = Down, 3 = Left, 4 = Right, and 5 = Escape; every other kind is treated
+/// as a printable character whose code point is @p value.
+EMSCRIPTEN_KEEPALIVE void dungeon_push_key(int kind, int value) {
+    g_key_queue.push_back(key_from_browser(kind, value));
+}
+
+} // extern "C"
+
+TerminalSession::TerminalSession() : _impl(std::make_unique<Impl>()) {
+    // The browser owns the keyboard; there is no terminal mode to switch.
+    _impl->active = true;
+}
+
+TerminalSession::~TerminalSession() = default;
+
+bool TerminalSession::active() const noexcept {
+    return _impl->active;
+}
+
+KeyEvent get_key() {
+    if (g_key_queue.empty()) {
+        return {};
+    }
+
+    const KeyEvent key = g_key_queue.front();
+    g_key_queue.pop_front();
+    return key;
+}
+
+KeyEvent poll_key() {
+    return get_key();
 }
 
 #else
