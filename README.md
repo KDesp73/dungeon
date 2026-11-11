@@ -12,6 +12,9 @@ screens, WASD player movement, action hooks for items, enemy AI with combat,
 consumable health potions, character progression, and periodic store levels
 with a walk-up shopkeeper.
 
+<img width="1272" height="1266" alt="Στιγμιότυπο οθόνης 2026-11-11, 11 22 26 πμ" src="https://github.com/user-attachments/assets/7b65b6e0-03ee-4aca-a7f1-3ac7ead340a9" />
+
+
 ## Status
 
 | Area         | State                                                                 |
