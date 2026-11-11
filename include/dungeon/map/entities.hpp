@@ -500,7 +500,7 @@ class Player : public Entity, public Alive {
   public:
     Player(std::size_t x, std::size_t y)
         : Entity('@', Color::White, Style::Bold, x, y),
-          Alive(PLAYER_MAX_HP, 13, 3, PLAYER_BASE_STAMINA) {}
+          Alive(PLAYER_MAX_HP, 13, 5, PLAYER_BASE_STAMINA) {}
 
     [[nodiscard]] const std::vector<Item>& inventory() const noexcept { return _inventory; }
     [[nodiscard]] bool                     has_item(ItemKind kind) const;
