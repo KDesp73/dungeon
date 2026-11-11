@@ -17,22 +17,11 @@ namespace dungeon::map {
 namespace {
 
 entities::Item make_loot_item(entities::ItemKind kind) {
-    switch (kind) {
-    case entities::ItemKind::Coin:
+    if (kind == entities::ItemKind::Chest) {
         return entities::Coin(0, 0);
-    case entities::ItemKind::CoinDouble:
-        return entities::CoinDouble(0, 0);
-    case entities::ItemKind::Diamond:
-        return entities::Diamond(0, 0);
-    case entities::ItemKind::Key:
-        return entities::Key(0, 0);
-    case entities::ItemKind::HealthPotion:
-        return entities::HealthPotion(0, 0);
-    case entities::ItemKind::Chest:
-        break;
     }
 
-    return entities::Coin(0, 0);
+    return entities::make_item(kind, 0, 0);
 }
 
 EntityPtr make_item_entity(const ItemSpec& item) {
@@ -57,6 +46,16 @@ EntityPtr make_item_entity(const ItemSpec& item) {
         return std::make_shared<entities::Key>(item.x, item.y);
     case entities::ItemKind::HealthPotion:
         return std::make_shared<entities::HealthPotion>(item.x, item.y);
+    case entities::ItemKind::Sword:
+        return std::make_shared<entities::Sword>(item.x, item.y);
+    case entities::ItemKind::Greatsword:
+        return std::make_shared<entities::Greatsword>(item.x, item.y);
+    case entities::ItemKind::Shield:
+        return std::make_shared<entities::Shield>(item.x, item.y);
+    case entities::ItemKind::Chainmail:
+        return std::make_shared<entities::Chainmail>(item.x, item.y);
+    case entities::ItemKind::Boots:
+        return std::make_shared<entities::Boots>(item.x, item.y);
     case entities::ItemKind::Chest:
         break;
     }
@@ -590,6 +589,58 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height) {
     return spec;
 }
 
+MapSpec Map::make_store_spec(std::size_t width, std::size_t height) {
+    MapSpec spec;
+    spec.width  = width;
+    spec.height = height;
+
+    // A store needs a room with walls, an entrance and an exit, plus space for
+    // the shopkeeper and the counter. Anything smaller falls back to an empty
+    // spec, which `Game::descend()` handles by generating a normal dungeon.
+    constexpr std::size_t min_size = 7;
+
+    if (width < min_size || height < min_size) {
+        return spec;
+    }
+
+    const std::size_t room_width  = std::min<std::size_t>(width - 2, 30);
+    const std::size_t room_height = std::min<std::size_t>(height - 2, 14);
+    const std::size_t room_x      = (width - room_width) / 2;
+    const std::size_t room_y      = (height - room_height) / 2;
+
+    spec.rooms.push_back(RoomSpec{room_x, room_y, room_width, room_height});
+
+    const std::size_t center_x = room_x + room_width / 2;
+    const std::size_t top      = room_y + 1;
+    const std::size_t bottom   = room_y + room_height - 2;
+
+    spec.entrance  = Point{center_x, bottom};
+    spec.exit      = Point{center_x, top};
+    spec.exit_open = true;
+
+    spec.has_shopkeeper = true;
+    spec.shopkeeper     = Point{center_x, room_y + room_height / 2};
+
+    // Put the counter between the shopkeeper and the entrance when the room is
+    // tall enough; otherwise place it beside the shopkeeper.
+    Point stand = spec.shopkeeper;
+
+    if (stand.y + 1 < bottom) {
+        stand.y += 1;
+    } else if (stand.y > top + 1) {
+        stand.y -= 1;
+    } else if (stand.x + 1 < room_x + room_width - 1) {
+        stand.x += 1;
+    } else {
+        stand.x -= 1;
+    }
+
+    spec.has_stand = true;
+    spec.stand     = stand;
+
+    return spec;
+}
+
 void Map::generate(const MapSpec& spec) {
     clear();
 
@@ -626,9 +677,10 @@ void Map::generate(const MapSpec& spec) {
         return point.x < _width && point.y < _height && at(point.x, point.y) == Tile::Floor;
     };
 
-    _entrance = {};
-    _exit     = {};
-    _has_exit = false;
+    _entrance  = {};
+    _exit      = {};
+    _has_exit  = false;
+    _exit_open = spec.exit_open;
 
     if (is_floor(spec.entrance)) {
         _entrance = spec.entrance;
@@ -638,6 +690,14 @@ void Map::generate(const MapSpec& spec) {
     if (is_floor(spec.exit)) {
         _exit     = spec.exit;
         _has_exit = true;
+    }
+
+    if (spec.has_shopkeeper && is_floor(spec.shopkeeper)) {
+        add(std::make_shared<entities::Shopkeeper>(spec.shopkeeper.x, spec.shopkeeper.y));
+    }
+
+    if (spec.has_stand && is_floor(spec.stand)) {
+        add(std::make_shared<entities::StoreStand>(spec.stand.x, spec.stand.y));
     }
 
     for (const ItemSpec& item : spec.items) {

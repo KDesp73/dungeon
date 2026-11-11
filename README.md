@@ -9,7 +9,8 @@ rule can be unit tested. The current build provides the build and test
 scaffolding, terminal-size detection, procedural ASCII map generation, a
 three-panel game UI, a fixed-timestep loop, a scene stack with title and pause
 screens, WASD player movement, action hooks for items, enemy AI with combat,
-and consumable health potions.
+consumable health potions, character progression, and periodic store levels
+with a walk-up shopkeeper.
 
 ## Status
 
@@ -19,9 +20,9 @@ and consumable health potions.
 | Terminal     | `dungeon::display::tui::term_size()` reads the terminal dimensions     |
 | Map          | Optional 3x3 room grid, orthogonal corridors, entrance/exit, item spawns |
 | Rendering    | Double-buffered framebuffer with game, stats, inventory, message, and chest panels |
-| Scenes       | Stack manager with title, game, and pause-menu scenes                  |
+| Scenes       | Stack manager with title, game, store, and pause-menu scenes          |
 | Tests        | Lightweight harness with `core`, `display`, `game`, `map`, and `scene` suites |
-| Gameplay     | WASD/arrow movement, item action hooks, enemy AI, combat, coin drops, and health potions |
+| Gameplay     | WASD/arrow movement, item action hooks, enemy AI, combat, coin drops, health potions, leveling, and store upgrades |
 
 The executable accepts `--help`, `--version`, `--seed <n>`, and `--print-map`.
 `--seed` makes dungeon generation reproducible, and `--print-map` writes the
@@ -37,7 +38,10 @@ enemy to attack it. While carrying a health potion, press `H` to drink one and
 recover a random amount of health. Press `Esc` to pause; the pause menu freezes
 the simulation, lists the controls, and offers Resume, Save game, and Quit.
 Press `Esc` again to resume or `Ctrl+C` to quit. When the player dies, press `R`
-to start a fresh run.
+to start a fresh run. Every fifth dungeon is a store level: walk close to the
+`&` shopkeeper to open the shop panel, use the arrow keys or `W`/`S` to choose
+an upgrade, `Enter` to buy it, and `Esc` to leave. The store exit is already
+open; step into the `[` to continue to the next dungeon.
 
 ## Command line
 
@@ -71,6 +75,13 @@ Generated maps use these glyphs:
 | `k`      | key                               |
 | `!`      | health potion                     |
 | `?`      | chest                             |
+| `&`      | shopkeeper (store level)          |
+| `=`      | store counter                     |
+| `/`      | sword (store upgrade)             |
+| `T`      | greatsword (store upgrade)        |
+| `d`      | shield (store upgrade)            |
+| `m`      | chainmail (store upgrade)         |
+| `b`      | boots (store upgrade)             |
 | space    | empty space outside rooms         |
 
 Every map has a seed exposed through `Map::seed()`; the executable prints it and
@@ -85,7 +96,9 @@ also spawn rats, goblins, and ogres; the player's starting room is less likely t
 contain one. A chest may contain the dungeon's key instead of it being placed
 directly in a room; in that case no second key is generated. `Map::generate(const
 MapSpec&)` rebuilds that exact layout and places the player, items, and enemies
-without regenerating anything randomly.
+without regenerating anything randomly. `Map::make_store_spec()` builds a single
+room with a shopkeeper, a counter, no enemies, and an exit that is open without a
+key.
 
 ## Movement and actions
 
@@ -140,6 +153,27 @@ enemy attacks it with the player's attack reduced by its defence. Killed enemies
 drop a randomized number of coins on their cell, with tougher enemies dropping
 the largest bounties. The right-hand stats panel shows the living enemy nearest
 to the player, including its health, attack, defence, speed, and bounty range.
+
+## Stores and progression
+
+Every fifth dungeon is a store level: a small room with a `&` shopkeeper behind
+a `=` counter and an exit that is already open. Walking within two cells of the
+shopkeeper opens the shop panel over the map. Move away and come back to reopen
+it after leaving. The panel lists equipment upgrades together with their price:
+swords and greatswords raise attack, shields and chainmail raise defence, and
+boots raise stamina. Items are bought with gold collected in the dungeon, and
+each offer can be bought once per store visit. The first purchase adds the item
+to the player's inventory; buying the same item again in a later store upgrades
+the item already carried, increasing its bonus instead of adding a duplicate.
+
+The store exit does not need a key. Step onto the `[` at the top of the room to
+descend to the next dungeon, carrying the player's stats and inventory with
+them.
+
+The player's character level also rises every fifth dungeon. A level-up grants
+bonus attack, defence, and stamina and restores the player to full health. The
+stats panel shows both the character level and the current dungeon number, so
+the next store and level-up are always easy to anticipate.
 
 ## Requirements
 
@@ -228,13 +262,13 @@ dungeon/
 │   ├── core/                 fixed-timestep ticker and project version
 │   ├── display/              framebuffer, terminal size, and UI helpers
 │   ├── map/                  map generation and tile API
-│   ├── scene/                scene stack, title screen, game and pause scenes
+│   ├── scene/                scene stack, title screen, game, store, and pause scenes
 │   └── game.hpp              movement, direction, and action hooks
 ├── src/
 │   ├── core/                 ticker and version implementations
 │   ├── display/              framebuffer, terminal, and UI implementations
 │   ├── map/                  map generation, tiles, and text output
-│   ├── scene/                scene manager, title, game, and pause scenes
+│   ├── scene/                scene manager, title, game, store, and pause scenes
 │   ├── game.cpp              movement and action dispatch
 │   └── main.cpp              process entry point
 └── tests/

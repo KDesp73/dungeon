@@ -79,6 +79,16 @@ char item_glyph(ItemKind kind)
         return '?';
     case ItemKind::HealthPotion:
         return '!';
+    case ItemKind::Sword:
+        return '/';
+    case ItemKind::Greatsword:
+        return 'T';
+    case ItemKind::Shield:
+        return 'd';
+    case ItemKind::Chainmail:
+        return 'm';
+    case ItemKind::Boots:
+        return 'b';
     }
     return '?';
 }
@@ -645,9 +655,18 @@ DUNGEON_TEST(map, generate_places_items_from_the_spec)
     CHECK_EQ(map.entities().size(), spec.items.size() + spec.enemies.size() + 1);
 
     std::size_t key_count = 0;
-    for (const dungeon::map::entities::Entity& entity : map.entities()) {
-        if (entity.tile() == 'k') {
+    for (const dungeon::map::EntityPtr& entity : map.entity_ptrs()) {
+        if (entity->tile() == 'k') {
             ++key_count;
+        }
+
+        const auto* chest = dynamic_cast<const dungeon::map::entities::Chest*>(entity.get());
+        if (chest != nullptr) {
+            for (const dungeon::map::entities::Item& item : chest->contents()) {
+                if (item.kind() == ItemKind::Key) {
+                    ++key_count;
+                }
+            }
         }
     }
     CHECK_EQ(key_count, 1U);
@@ -993,4 +1012,56 @@ DUNGEON_TEST(map, walkable_accepts_floor_walkway_and_doors)
     CHECK(!map.walkable(0, 0));
     CHECK(!map.walkable(5, 0));
     CHECK(!map.walkable(0, 4));
+}
+
+DUNGEON_TEST(map, make_store_spec_builds_a_shop_room_with_an_open_exit)
+{
+    Map map;
+    const MapSpec spec = map.make_store_spec(80, 30);
+
+    REQUIRE(!spec.rooms.empty());
+    CHECK(spec.exit_open);
+    CHECK(spec.has_shopkeeper);
+    CHECK(spec.has_stand);
+    CHECK(spec.enemies.empty());
+    CHECK(spec.items.empty());
+    CHECK(!(spec.entrance.x == spec.exit.x && spec.entrance.y == spec.exit.y));
+
+    map.generate(spec);
+
+    REQUIRE(map.player() != nullptr);
+    CHECK(map.exit_unlocked());
+    CHECK(!map.player()->has_key());
+    CHECK(has_entity_at(map, '&', spec.shopkeeper.x, spec.shopkeeper.y));
+    CHECK(has_entity_at(map, '=', spec.stand.x, spec.stand.y));
+    CHECK(map.walkable(spec.entrance.x, spec.entrance.y));
+    CHECK(map.walkable(spec.exit.x, spec.exit.y));
+}
+
+DUNGEON_TEST(map, an_open_exit_does_not_require_a_key)
+{
+    MapSpec spec;
+    spec.width     = 20;
+    spec.height    = 10;
+    spec.rooms     = {{2, 2, 6, 5}};
+    spec.entrance  = {3, 3};
+    spec.exit      = {4, 3};
+    spec.exit_open = true;
+
+    Map map;
+    map.generate(spec);
+
+    REQUIRE(map.player() != nullptr);
+    CHECK(!map.player()->has_key());
+    CHECK(map.exit_unlocked());
+}
+
+DUNGEON_TEST(map, a_store_cannot_be_built_in_a_map_that_is_too_small)
+{
+    Map map;
+    const MapSpec spec = map.make_store_spec(4, 4);
+
+    CHECK(spec.rooms.empty());
+    CHECK_EQ(spec.width, 4U);
+    CHECK_EQ(spec.height, 4U);
 }

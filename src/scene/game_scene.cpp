@@ -3,6 +3,7 @@
 #include "dungeon/display/ui.hpp"
 #include "dungeon/scene/pause_scene.hpp"
 #include "dungeon/scene/scene_manager.hpp"
+#include "dungeon/scene/store_scene.hpp"
 
 #include <chrono>
 #include <memory>
@@ -46,6 +47,7 @@ bool GameScene::handle_key(const controls::KeyEvent& key, SceneContext& context)
 
     if (const auto direction = game::direction_from_key(key)) {
         static_cast<void>(_game.move(*direction));
+        update_store_proximity(context);
         return true;
     }
 
@@ -77,17 +79,18 @@ bool GameScene::handle_key(const controls::KeyEvent& key, SceneContext& context)
     }
 }
 
-void GameScene::update(Duration delta, SceneContext& /*context*/) {
+void GameScene::update(Duration delta, SceneContext& context) {
     if (_game.game_over()) {
         return;
     }
 
     _game.update(std::chrono::duration<double>(delta).count());
+    update_store_proximity(context);
 }
 
 void GameScene::draw(display::FrameBuffer& buffer, SceneContext& /*context*/) {
     const display::tui::Layout layout = display::tui::make_layout(buffer.width(), buffer.height());
-    const display::tui::HudState hud{_game.messages(), _game.chest_selection()};
+    const display::tui::HudState hud{_game.messages(), _game.chest_selection(), _game.depth()};
 
     display::tui::draw_ui(buffer, _game.map(), layout, hud);
 
@@ -128,6 +131,20 @@ std::string GameScene::save_game() {
     }
 
     return _config.save_handler(_game) ? "Game saved." : "Could not save the game.";
+}
+
+void GameScene::update_store_proximity(SceneContext& context) {
+    const bool near = _game.nearby_shopkeeper() != nullptr;
+
+    // Open the shop when the player enters the shopkeeper's range. The latch
+    // keeps it closed after the player leaves the menu until they walk away and
+    // come back.
+    if (near && !_store_near) {
+        _game.open_store();
+        context.scenes.push(std::make_unique<StoreScene>(_game));
+    }
+
+    _store_near = near;
 }
 
 } // namespace dungeon::scene

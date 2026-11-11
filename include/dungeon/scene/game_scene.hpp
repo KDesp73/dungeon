@@ -38,7 +38,9 @@ struct GameSceneConfig {
                                  "Attack:    move into an enemy\n"
                                  "Potion:    H use health potion\n"
                                  "Chest:     [ ] cycle, 1-9 select\n"
-                                 "Take item: Enter";
+                                 "Take item: Enter\n"
+                                 "Store:     approach the shopkeeper\n"
+                                 "Shop:      Enter buy, Esc leave";
 
     /// Called when the player chooses "Save game" in the pause menu.
     SaveHandler save_handler;
@@ -66,10 +68,12 @@ class GameScene final : public Scene {
 
   private:
     void        open_pause_menu(SceneContext& context);
+    void        update_store_proximity(SceneContext& context);
     std::string save_game();
 
     GameSceneConfig _config;
     game::Game      _game;
+    bool            _store_near = false;
 };
 
 } // namespace dungeon::scene

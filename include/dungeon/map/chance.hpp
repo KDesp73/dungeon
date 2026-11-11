@@ -16,7 +16,7 @@ inline constexpr double CHEST = 0.2;
 /// Probability that a room contains a diamond.
 inline constexpr double DIAMOND = 0.05;
 /// Probability that a room contains a health potion.
-inline constexpr double HEALTH_POTION = 0.2;
+inline constexpr double HEALTH_POTION = 0.08;
 /// Minimum number of items rolled into a generated chest.
 inline constexpr std::size_t CHEST_LOOT_MIN = 1;
 /// Maximum number of items rolled into a generated chest.
@@ -31,18 +31,18 @@ inline constexpr double CHEST_LOOT_DIAMOND = 0.05;
 ///
 /// At most one key is placed in the whole dungeon, so this roll is skipped once
 /// a chest already contains the key.
-inline constexpr double CHEST_LOOT_KEY = 0.1;
+inline constexpr double CHEST_LOOT_KEY = 0.05;
 /// Probability that a cell in the 3x3 room grid contains a room.
 inline constexpr double ROOM_PRESENT = 0.75;
 
 /// Probability that a room contains at least one enemy.
-inline constexpr double ENEMY_ROOM_PRESENT = 0.8;
+inline constexpr double ENEMY_ROOM_PRESENT = 0.85;
 /// Probability that the player's starting room contains at least one enemy.
 inline constexpr double ENEMY_ENTRANCE_ROOM_PRESENT = 0.35;
 /// Minimum number of enemies rolled for a room that contains enemies.
 inline constexpr std::size_t ENEMY_MIN_PER_ROOM = 1;
 /// Maximum number of enemies rolled for a room that contains enemies.
-inline constexpr std::size_t ENEMY_MAX_PER_ROOM = 2;
+inline constexpr std::size_t ENEMY_MAX_PER_ROOM = 3;
 
 /// Relative weight for placing the key in the player's starting room.
 inline constexpr double KEY_SAME_ROOM_WEIGHT = 0.1;

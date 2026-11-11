@@ -6,6 +6,7 @@
 #include "dungeon/scene/game_scene.hpp"
 #include "dungeon/scene/pause_scene.hpp"
 #include "dungeon/scene/scene_manager.hpp"
+#include "dungeon/scene/store_scene.hpp"
 
 #include <chrono>
 #include <memory>
@@ -21,6 +22,7 @@ using dungeon::scene::GameSceneConfig;
 using dungeon::scene::PauseScene;
 using dungeon::scene::SceneContext;
 using dungeon::scene::SceneManager;
+using dungeon::scene::StoreScene;
 
 namespace {
 
@@ -33,6 +35,16 @@ MapSpec make_test_spec() {
     spec.entrance    = {3, 3};
     spec.exit        = {6, 3};
     spec.items       = {{dungeon::map::entities::ItemKind::Coin, 4, 3}};
+    return spec;
+}
+
+MapSpec make_large_spec() {
+    MapSpec spec;
+    spec.width    = 80;
+    spec.height   = 30;
+    spec.rooms    = {{1, 1, 78, 28}};
+    spec.entrance = {3, 3};
+    spec.exit     = {6, 3};
     return spec;
 }
 
@@ -211,4 +223,118 @@ DUNGEON_TEST(scene, game_scene_pause_menu_reports_when_saving_is_unavailable) {
     CHECK(manager.handle_key(KeyEvent::from_kind(KeyKind::Down), context));
     CHECK(manager.handle_key(KeyEvent::from_character('\n'), context));
     CHECK_EQ(pause->status(), std::string("Saving is not available yet."));
+}
+
+DUNGEON_TEST(scene, game_scene_opens_the_shop_menu_near_the_shopkeeper) {
+    SceneManager manager;
+    SceneContext context{manager};
+
+    GameSceneConfig config;
+    config.layout = make_large_spec();
+
+    manager.push(std::make_unique<GameScene>(std::move(config)));
+
+    auto* scene = dynamic_cast<GameScene*>(manager.top());
+    REQUIRE(scene != nullptr);
+
+    for (int i = 0; i < 4; ++i) {
+        scene->game().descend();
+    }
+
+    REQUIRE(scene->game().store_level());
+    REQUIRE(scene->game().player() != nullptr);
+    CHECK(manager.size() == 1U);
+
+    const dungeon::map::entities::Shopkeeper* shopkeeper = nullptr;
+    for (const dungeon::map::EntityPtr& entity : scene->game().map().entity_ptrs()) {
+        if (const auto* candidate =
+                dynamic_cast<const dungeon::map::entities::Shopkeeper*>(entity.get())) {
+            shopkeeper = candidate;
+        }
+    }
+
+    REQUIRE(shopkeeper != nullptr);
+
+    scene->game().player()->place(shopkeeper->x,
+                                  shopkeeper->y + dungeon::game::kShopkeeperReach);
+    manager.update(std::chrono::milliseconds(0), context);
+
+    CHECK_EQ(manager.size(), 2U);
+    auto* store = dynamic_cast<StoreScene*>(manager.top());
+    REQUIRE(store != nullptr);
+
+    CHECK(manager.handle_key(KeyEvent::from_kind(KeyKind::Escape), context));
+    CHECK_EQ(manager.size(), 1U);
+    CHECK(!scene->game().store_open());
+
+    // Still in range: the menu stays closed until the player walks away and
+    // comes back.
+    manager.update(std::chrono::milliseconds(0), context);
+    CHECK_EQ(manager.size(), 1U);
+
+    const dungeon::map::Point entrance = scene->game().map().entrance();
+    scene->game().player()->place(entrance.x, entrance.y);
+    manager.update(std::chrono::milliseconds(0), context);
+    CHECK_EQ(manager.size(), 1U);
+
+    scene->game().player()->place(shopkeeper->x,
+                                  shopkeeper->y + dungeon::game::kShopkeeperReach);
+    manager.update(std::chrono::milliseconds(0), context);
+    CHECK_EQ(manager.size(), 2U);
+}
+
+DUNGEON_TEST(scene, store_scene_draws_its_catalog) {
+    dungeon::game::Game game(80, 30);
+    REQUIRE(game.player() != nullptr);
+
+    for (int i = 0; i < 4; ++i) {
+        game.descend();
+    }
+
+    REQUIRE(game.store_level());
+    game.open_store();
+
+    SceneManager manager;
+    SceneContext context{manager};
+
+    manager.push(std::make_unique<StoreScene>(game));
+
+    dungeon::display::FrameBuffer buffer(80, 24);
+    manager.draw(buffer, context);
+
+    const std::string frame = buffer.render();
+    CHECK(frame.find("STORE") != std::string::npos);
+    CHECK(frame.find("Sword") != std::string::npos);
+    CHECK(frame.find("Gold:") != std::string::npos);
+}
+
+DUNGEON_TEST(scene, store_scene_buys_an_upgrade_and_leaves) {
+    dungeon::game::Game game(80, 30);
+    REQUIRE(game.player() != nullptr);
+
+    for (int i = 0; i < 4; ++i) {
+        game.descend();
+    }
+
+    REQUIRE(game.store_level());
+    game.open_store();
+    game.player()->stats().gold = 100;
+
+    SceneManager manager;
+    SceneContext context{manager};
+
+    manager.push(std::make_unique<StoreScene>(game));
+
+    auto* store = dynamic_cast<StoreScene*>(manager.top());
+    REQUIRE(store != nullptr);
+
+    const int attack_before = game.player()->stats().attack;
+
+    CHECK(manager.handle_key(KeyEvent::from_character('\n'), context));
+    CHECK_EQ(store->status(), std::string("Bought the Sword for 10 gold."));
+    CHECK_EQ(game.player()->stats().attack, attack_before + 2);
+
+    CHECK(manager.handle_key(KeyEvent::from_kind(KeyKind::Escape), context));
+    CHECK(manager.empty());
+    CHECK(!game.store_open());
 }

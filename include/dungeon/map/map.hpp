@@ -97,8 +97,8 @@ struct EnemySpec {
 
 /// Complete description of a generated dungeon.
 ///
-/// Create one with `Map::make_spec()` and pass it to
-/// `Map::generate(const MapSpec&)` to rebuild the exact same map.
+/// Create one with `Map::make_spec()` or `Map::make_store_spec()` and pass it
+/// to `Map::generate(const MapSpec&)` to rebuild the exact same map.
 struct MapSpec {
     std::size_t                 width  = 0;
     std::size_t                 height = 0;
@@ -108,6 +108,17 @@ struct MapSpec {
     Point                       exit;
     std::vector<ItemSpec>       items;
     std::vector<EnemySpec>      enemies;
+
+    /// When true the exit works without the player carrying a key.
+    bool exit_open = false;
+
+    /// Places a shopkeeper at @p shopkeeper.
+    bool  has_shopkeeper = false;
+    Point shopkeeper;
+
+    /// Places a decorative store counter at @p stand.
+    bool  has_stand = false;
+    Point stand;
 };
 
 inline const char32_t EXIT_GLYPH = '[';
@@ -153,6 +164,14 @@ class Map {
     /// build it.
     [[nodiscard]] MapSpec make_spec(std::size_t width = 64, std::size_t height = 32);
 
+    /// Creates the layout of a store level.
+    ///
+    /// A store is a single room with an entrance at the bottom, an already open
+    /// exit at the top, and a shopkeeper with a counter in the middle. It has no
+    /// enemies and no dungeon key. The returned spec is empty when @p width or
+    /// @p height is too small to hold a store.
+    [[nodiscard]] MapSpec make_store_spec(std::size_t width = 64, std::size_t height = 32);
+
     /// Removes every tile and resets the map to zero width and height.
     void clear();
 
@@ -168,7 +187,10 @@ class Map {
     /// Floor cell that ends the dungeon, or `{0, 0}` when no exit exists.
     [[nodiscard]] Point exit() const noexcept { return _exit; }
 
-    /// True when the player carries the key and the exit can be used.
+    /// True when the exit can be used.
+    ///
+    /// Store exits are always open; other exits require the player to carry a
+    /// key.
     [[nodiscard]] bool exit_unlocked() const noexcept;
 
     /// Seed used to initialise this map's random generator.
@@ -227,7 +249,8 @@ class Map {
     std::size_t       _height = 0;
     Point             _entrance;
     Point             _exit;
-    bool              _has_exit = false;
+    bool              _has_exit    = false;
+    bool              _exit_open   = false;
     std::vector<Tile> _tiles;
     chance::Chance    _chance;
 

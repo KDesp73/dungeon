@@ -7,11 +7,21 @@
 #include <cstddef>
 #include <functional>
 #include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
 
 namespace dungeon::game {
+
+/// Number of dungeons between store levels.
+inline constexpr std::size_t kStoreInterval = 5;
+
+/// Number of dungeons between character level increases.
+inline constexpr std::size_t kLevelUpInterval = 5;
+
+/// Manhattan distance within which the shop menu opens.
+inline constexpr std::size_t kShopkeeperReach = 1;
 
 /// A cardinal direction the player can move in.
 enum class Direction : unsigned char {
@@ -69,6 +79,14 @@ struct ActionEvent {
 /// it stays in range, so hooks that change state should be idempotent.
 using ActionHook = std::function<void(const ActionEvent&)>;
 
+/// One purchasable upgrade offered by a store level.
+struct StoreItem {
+    map::entities::ItemKind kind{};
+    std::string             name;
+    std::string             description;
+    int                     price = 0;
+};
+
 /// Owns the map and the rules that move the player through it.
 class Game {
   public:
@@ -99,7 +117,8 @@ class Game {
     ///
     /// Enemies wander independently until the player enters their aggro radius,
     /// then chase him. An enemy adjacent to the player attacks whenever its
-    /// attack cooldown is ready. Calling this after the player has died does
+    /// attack cooldown is ready. Damage is reduced by the player's defence and
+    /// is never lower than one. Calling this after the player has died does
     /// nothing.
     void update(double seconds);
 
@@ -121,6 +140,49 @@ class Game {
     /// successful use.
     [[nodiscard]] bool use_health_potion();
 
+    /// Descends to the next dungeon, carrying the player's stats and inventory.
+    ///
+    /// Enemies grow tougher with depth: every dungeon below the first adds
+    /// health, attack, defence, and bounty to each enemy. The player's level
+    /// increases every `kLevelUpInterval` dungeons, raising attack, defence,
+    /// and stamina and restoring health. Every `kStoreInterval` dungeons the
+    /// next dungeon is a store level: a room with a shopkeeper and an already
+    /// open exit. This is called automatically after stepping onto the unlocked
+    /// exit.
+    void descend();
+
+    /// Number of dungeons visited in this run, starting at one.
+    [[nodiscard]] std::size_t depth() const noexcept { return _depth; }
+
+    /// True while the current dungeon is a store level.
+    [[nodiscard]] bool store_level() const noexcept { return _store_level; }
+
+    /// True while the player has the shop menu open.
+    [[nodiscard]] bool store_open() const noexcept { return _store_open; }
+
+    /// Opens the shop menu.
+    ///
+    /// `GameScene` calls this when the player walks close to a shopkeeper.
+    void open_store() noexcept { _store_open = true; }
+
+    /// Upgrades offered by the current store level.
+    [[nodiscard]] std::span<const StoreItem> store_items() const noexcept;
+
+    /// True when the store item at @p index was already bought this visit.
+    [[nodiscard]] bool store_item_sold(std::size_t index) const noexcept;
+
+    /// Buys or upgrades the store item at @p index.
+    ///
+    /// The item's stats are applied to the player and the price is deducted
+    /// from the player's gold. If the player already carries the same kind of
+    /// equipment it is upgraded instead of being added a second time. Returns
+    /// false when the shop menu is closed, the index is invalid, the item was
+    /// already bought this visit, or the player cannot afford it.
+    [[nodiscard]] bool buy_store_item(std::size_t index);
+
+    /// Closes the shop menu without leaving the store level.
+    void close_store() noexcept { _store_open = false; }
+
     /// Replaces the action hook. Passing an empty function disables it.
     void set_action_hook(ActionHook hook) { _action_hook = std::move(hook); }
 
@@ -133,6 +195,13 @@ class Game {
 
     /// Messages produced by gameplay, oldest first.
     [[nodiscard]] const std::vector<std::string>& messages() const noexcept { return _messages; }
+
+    /// The shopkeeper within `kShopkeeperReach` cells of the player.
+    ///
+    /// Returns `nullptr` when the player is too far away or the map has no
+    /// shopkeeper.
+    [[nodiscard]] map::entities::Shopkeeper*       nearby_shopkeeper() noexcept;
+    [[nodiscard]] const map::entities::Shopkeeper* nearby_shopkeeper() const noexcept;
 
     /// The chest the player is standing on or orthogonally next to.
     ///
@@ -161,14 +230,10 @@ class Game {
   private:
     /// Applies the built-in effect of stepping on @p event's item.
     ///
-    /// Coins and diamonds are added to the player's gold, while keys and health
-    /// potions are equipped into the inventory; picked-up items are removed from
-    /// the map. Chests have no default step effect.
+    /// Coins and diamonds are added to the player's gold, while keys, potions,
+    /// and equipment are equipped into the inventory; picked-up items are
+    /// removed from the map. Chests have no default step effect.
     void apply_step_action(const ActionEvent& event);
-
-    /// Generates the next dungeon, consumes the key, and carries the player's
-    /// stats and remaining inventory into the new map.
-    void advance_level();
 
     /// Scans the map after a move and calls `_action_hook` for every item the
     /// player stepped on or is standing next to.
@@ -207,6 +272,12 @@ class Game {
     [[nodiscard]] bool occupied(std::size_t x, std::size_t y,
                                 const map::entities::Enemy* ignore = nullptr) const noexcept;
 
+    /// Applies the current dungeon depth to every enemy on the map.
+    ///
+    /// Enemies are created with their base profile stats, so this is called
+    /// once after each new dungeon is generated.
+    void scale_enemies_for_depth();
+
     /// Appends @p message to the message log, dropping the oldest entry when
     /// the log is full.
     void push_message(std::string message);
@@ -215,7 +286,11 @@ class Game {
     ActionHook               _action_hook;
     std::vector<std::string> _messages;
     map::chance::Chance      _chance;
+    std::vector<bool>        _store_sold;
     std::size_t              _chest_selection = 0;
+    std::size_t              _depth           = 1;
+    bool                     _store_level     = false;
+    bool                     _store_open      = false;
     bool                     _game_over       = false;
 };
 

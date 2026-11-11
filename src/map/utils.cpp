@@ -9,9 +9,10 @@ namespace dungeon::map {
 void Map::clear() {
     _width    = 0;
     _height   = 0;
-    _entrance = {};
-    _exit     = {};
-    _has_exit = false;
+    _entrance  = {};
+    _exit      = {};
+    _has_exit  = false;
+    _exit_open = false;
     _tiles.clear();
     _entities.clear();
     _player = nullptr;
@@ -51,7 +52,11 @@ bool Map::walkable(std::size_t x, std::size_t y) const noexcept {
 }
 
 bool Map::exit_unlocked() const noexcept {
-    return _has_exit && _player != nullptr && _player->has_key();
+    if (!_has_exit) {
+        return false;
+    }
+
+    return _exit_open || (_player != nullptr && _player->has_key());
 }
 
 void Map::print(FILE* fd) const {

@@ -167,7 +167,7 @@ void draw_item_slots(FrameBuffer& buffer, const Rect& rect,
     }
 }
 
-void draw_stats(FrameBuffer& buffer, const Rect& rect, std::uint32_t seed,
+void draw_stats(FrameBuffer& buffer, const Rect& rect, std::uint32_t seed, std::size_t depth,
                 const dungeon::map::entities::Player* player,
                 const dungeon::map::Map&              map) {
     panel(buffer, rect, "STATS");
@@ -192,7 +192,9 @@ void draw_stats(FrameBuffer& buffer, const Rect& rect, std::uint32_t seed,
     };
 
     line("Level:    " + std::to_string(stats.level));
-    line("HP:       " + std::to_string(stats.hp));
+    line("Dungeon:  " + std::to_string(depth));
+    line("HP:       " + std::to_string(stats.hp) + "/" +
+         std::to_string(dungeon::map::entities::max_hp(stats)));
     line("Stamina:  " + std::to_string(stats.stamina));
     line("Attack:   " + std::to_string(stats.attack));
     line("Defense:  " + std::to_string(stats.defence));
@@ -453,7 +455,7 @@ void draw_ui(FrameBuffer& buffer, const dungeon::map::Map& map, const Layout& la
     panel(buffer, layout.game, "DUNGEON");
     draw_map(buffer, map, layout.game);
 
-    draw_stats(buffer, layout.stats, map.seed(), map.player(), map);
+    draw_stats(buffer, layout.stats, map.seed(), hud.dungeon_depth, map.player(), map);
     draw_inventory(buffer, layout.inventory, map.player());
     draw_messages(buffer, layout.messages, hud.messages);
     draw_chest(buffer, layout.chest, nearby_chest(map), hud.selected_chest_item);

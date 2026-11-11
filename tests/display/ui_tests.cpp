@@ -225,7 +225,7 @@ DUNGEON_TEST(display, ui_shows_gold_after_collecting_a_coin) {
 
     const std::string gold = "Gold:     1";
     const std::size_t x    = layout.stats.x + 2;
-    const std::size_t y    = layout.stats.y + 7;
+    const std::size_t y    = layout.stats.y + 8;
 
     for (std::size_t i = 0; i < gold.size(); ++i) {
         CHECK_EQ(buffer.at(x + i, y), gold[i]);

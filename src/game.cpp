@@ -40,10 +40,33 @@ std::string item_name(map::entities::ItemKind kind) {
         return "key";
     case map::entities::ItemKind::HealthPotion:
         return "health potion";
+    case map::entities::ItemKind::Sword:
+        return "sword";
+    case map::entities::ItemKind::Greatsword:
+        return "greatsword";
+    case map::entities::ItemKind::Shield:
+        return "shield";
+    case map::entities::ItemKind::Chainmail:
+        return "chainmail";
+    case map::entities::ItemKind::Boots:
+        return "boots";
     case map::entities::ItemKind::Chest:
         return "chest";
     }
     return "item";
+}
+
+/// The upgrades sold in every store level.
+std::span<const StoreItem> store_catalog() noexcept {
+    static const StoreItem items[] = {
+        {map::entities::ItemKind::Sword, "Sword", "+2 attack", 10},
+        {map::entities::ItemKind::Shield, "Shield", "+2 defence", 12},
+        {map::entities::ItemKind::Chainmail, "Chainmail", "+3 defence, +1 stamina (+2 HP)", 22},
+        {map::entities::ItemKind::Greatsword, "Greatsword", "+5 attack", 35},
+        {map::entities::ItemKind::Boots, "Boots", "+2 stamina (+4 HP)", 8},
+    };
+
+    return items;
 }
 
 } // namespace
@@ -114,6 +137,10 @@ void Game::generate(std::size_t width, std::size_t height) {
     _map.generate(width, height);
     _chance.reseed(_map.seed());
     _chest_selection = 0;
+    _depth           = 1;
+    _store_level     = false;
+    _store_open      = false;
+    _store_sold.assign(store_catalog().size(), false);
     _game_over       = false;
     push_message("You enter the dungeon.");
 }
@@ -122,6 +149,10 @@ void Game::generate(const map::MapSpec& spec) {
     _map.generate(spec);
     _chance.reseed(_map.seed());
     _chest_selection = 0;
+    _depth           = 1;
+    _store_level     = false;
+    _store_open      = false;
+    _store_sold.assign(store_catalog().size(), false);
     _game_over       = false;
     push_message("You enter the dungeon.");
 }
@@ -166,7 +197,7 @@ bool Game::move(Direction direction) {
     auto* current = _map.player();
     if (current != nullptr && _map.exit_unlocked() && current->x == _map.exit().x &&
         current->y == _map.exit().y) {
-        advance_level();
+        descend();
     }
 
     return true;
@@ -279,7 +310,8 @@ bool Game::use_health_potion() {
     }
 
     const int hp = player->stats().hp;
-    if (hp >= map::entities::PLAYER_MAX_HP) {
+    const int cap = map::entities::max_hp(player->stats());
+    if (hp >= cap) {
         push_message("You are already at full health.");
         return false;
     }
@@ -287,7 +319,7 @@ bool Game::use_health_potion() {
     const auto rolled = _chance.range(
         static_cast<std::size_t>(map::entities::HEALTH_POTION_HEAL_MIN),
         static_cast<std::size_t>(map::entities::HEALTH_POTION_HEAL_MAX));
-    const int healed = std::min(static_cast<int>(rolled), map::entities::PLAYER_MAX_HP - hp);
+    const int healed = std::min(static_cast<int>(rolled), cap - hp);
 
     player->stats().hp += healed;
     player->drop(map::entities::ItemKind::HealthPotion);
@@ -520,25 +552,140 @@ std::optional<Offset> Game::first_step_toward(std::size_t start_x, std::size_t s
                   static_cast<int>(step / width) - static_cast<int>(start_y)};
 }
 
-void Game::advance_level() {
+void Game::descend() {
     const auto* player = _map.player();
     if (player == nullptr) {
         return;
     }
 
-    const std::size_t width     = _map.width();
-    const std::size_t height    = _map.height();
-    const auto        stats     = player->stats();
-    const auto        inventory = player->inventory();
+    const std::size_t width      = _map.width() > 0 ? _map.width() : 64;
+    const std::size_t height     = _map.height() > 0 ? _map.height() : 32;
+    const auto        stats      = player->stats();
+    const auto        inventory  = player->inventory();
+    const std::size_t next_depth = _depth + 1;
 
-    generate(width, height);
+    bool store_level = next_depth % kStoreInterval == 0;
+
+    if (store_level) {
+        map::MapSpec spec = _map.make_store_spec(width, height);
+
+        if (spec.rooms.empty()) {
+            spec        = _map.make_spec(width, height);
+            store_level = false;
+        }
+
+        _map.generate(spec);
+        _store_sold.assign(store_catalog().size(), false);
+    } else {
+        _map.generate(width, height);
+    }
+
+    _depth           = next_depth;
+    _store_level     = store_level;
+    _store_open      = false;
+    _chest_selection = 0;
+
+    scale_enemies_for_depth();
+
+    const bool level_up = _depth % kLevelUpInterval == 0;
 
     if (auto* next = _map.player(); next != nullptr) {
         next->restore(stats, inventory);
         next->drop(map::entities::ItemKind::Key);
+
+        if (level_up) {
+            const std::size_t level = next->level_up();
+            next->stats().attack += map::entities::LEVEL_UP_ATTACK_BONUS;
+            next->stats().defence += map::entities::LEVEL_UP_DEFENCE_BONUS;
+            next->stats().stamina += map::entities::LEVEL_UP_STAMINA_BONUS;
+            next->stats().hp = map::entities::max_hp(next->stats());
+
+            push_message("You reached level " + std::to_string(level) + ".");
+        }
     }
 
     push_message("You descend deeper.");
+
+    if (store_level) {
+        push_message("A store level appears. Approach the shopkeeper to browse.");
+    }
+}
+
+void Game::scale_enemies_for_depth() {
+    for (const map::EntityPtr& entity : _map.entity_ptrs()) {
+        auto* enemy = dynamic_cast<map::entities::Enemy*>(entity.get());
+        if (enemy != nullptr) {
+            enemy->scale_for_depth(_depth);
+        }
+    }
+}
+
+std::span<const StoreItem> Game::store_items() const noexcept {
+    return store_catalog();
+}
+
+bool Game::store_item_sold(std::size_t index) const noexcept {
+    return index < _store_sold.size() && _store_sold[index];
+}
+
+bool Game::buy_store_item(std::size_t index) {
+    auto*      player = _map.player();
+    const auto items  = store_catalog();
+
+    if (player == nullptr || !_store_open || index >= items.size()) {
+        return false;
+    }
+
+    const StoreItem& item = items[index];
+
+    if (store_item_sold(index)) {
+        push_message("The " + item.name + " is already sold.");
+        return false;
+    }
+
+    if (player->stats().gold < item.price) {
+        push_message("You cannot afford the " + item.name + ".");
+        return false;
+    }
+
+    const bool owned = player->has_item(item.kind);
+
+    player->stats().gold -= item.price;
+    player->equip(map::entities::make_item(item.kind));
+    _store_sold[index] = true;
+
+    push_message((owned ? "Upgraded the " : "Bought the ") + item.name + " for " +
+                 std::to_string(item.price) + " gold.");
+    return true;
+}
+
+const map::entities::Shopkeeper* Game::nearby_shopkeeper() const noexcept {
+    const auto* player = _map.player();
+    if (player == nullptr) {
+        return nullptr;
+    }
+
+    for (const map::EntityPtr& entity : _map.entity_ptrs()) {
+        const auto* shopkeeper = dynamic_cast<const map::entities::Shopkeeper*>(entity.get());
+        if (shopkeeper == nullptr) {
+            continue;
+        }
+
+        const std::size_t dx =
+            shopkeeper->x > player->x ? shopkeeper->x - player->x : player->x - shopkeeper->x;
+        const std::size_t dy =
+            shopkeeper->y > player->y ? shopkeeper->y - player->y : player->y - shopkeeper->y;
+
+        if (dx + dy <= kShopkeeperReach) {
+            return shopkeeper;
+        }
+    }
+
+    return nullptr;
+}
+
+map::entities::Shopkeeper* Game::nearby_shopkeeper() noexcept {
+    return const_cast<map::entities::Shopkeeper*>(std::as_const(*this).nearby_shopkeeper());
 }
 
 const map::entities::Chest* Game::nearby_chest() const noexcept {
@@ -677,6 +824,18 @@ void Game::apply_step_action(const ActionEvent& event) {
         static_cast<void>(_map.remove(event.item.id()));
         push_message("Health potion acquired.");
         break;
+    case map::entities::ItemKind::Sword:
+    case map::entities::ItemKind::Greatsword:
+    case map::entities::ItemKind::Shield:
+    case map::entities::ItemKind::Chainmail:
+    case map::entities::ItemKind::Boots: {
+        const map::entities::ItemKind kind  = event.item.kind();
+        const bool                    owned = event.player.has_item(kind);
+        event.player.equip(event.item);
+        static_cast<void>(_map.remove(event.item.id()));
+        push_message(item_name(kind) + (owned ? " upgraded." : " equipped."));
+        break;
+    }
     case map::entities::ItemKind::Chest:
         break;
     }

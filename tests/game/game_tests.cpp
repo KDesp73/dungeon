@@ -175,6 +175,43 @@ DUNGEON_TEST(game, the_exit_unlocks_after_the_key_is_equipped) {
     CHECK(game.map().exit_unlocked());
 }
 
+DUNGEON_TEST(game, stepping_on_a_sword_equips_it_and_raises_attack) {
+    MapSpec spec = make_test_spec();
+    spec.items   = {{ItemKind::Sword, 4, 3}};
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+    const int attack_before = game.player()->stats().attack;
+
+    CHECK(game.move(Direction::Right));
+
+    CHECK_EQ(game.player()->stats().attack, attack_before + 2);
+    CHECK(game.player()->has_item(ItemKind::Sword));
+    CHECK_EQ(game.map().entity_ptrs().size(), 1U);
+}
+
+DUNGEON_TEST(game, stepping_on_owned_equipment_upgrades_it_instead_of_duplicating_it) {
+    MapSpec spec = make_test_spec();
+    spec.items   = {{ItemKind::Sword, 4, 3}, {ItemKind::Sword, 5, 3}};
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+    const int attack_before = game.player()->stats().attack;
+
+    CHECK(game.move(Direction::Right));
+    REQUIRE(game.player()->has_item(ItemKind::Sword));
+    CHECK_EQ(game.player()->inventory().size(), 1U);
+
+    CHECK(game.move(Direction::Right));
+
+    CHECK_EQ(game.player()->inventory().size(), 1U);
+    CHECK_EQ(game.player()->stats().attack, attack_before + 4);
+    REQUIRE(!game.player()->inventory().empty());
+    CHECK_EQ(game.player()->inventory().front().level(), 2U);
+    REQUIRE(!game.messages().empty());
+    CHECK_EQ(game.messages().back(), std::string("sword upgraded."));
+}
+
 DUNGEON_TEST(game, stepping_on_a_health_potion_stores_it_without_healing) {
     MapSpec spec = make_test_spec();
     spec.items   = {{ItemKind::HealthPotion, 4, 3}};
@@ -476,10 +513,10 @@ DUNGEON_TEST(game, an_adjacent_enemy_attacks_the_player) {
 
     game.update(2.0);
 
-    CHECK_EQ(game.player()->stats().hp, hp_before - 1);
+    CHECK_EQ(game.player()->stats().hp, hp_before - 3);
     CHECK(!game.game_over());
     REQUIRE(!game.messages().empty());
-    CHECK_EQ(game.messages().back(), std::string("The Goblin hits you for 1."));
+    CHECK_EQ(game.messages().back(), std::string("The Goblin hits you for 3."));
 }
 
 DUNGEON_TEST(game, a_distant_enemy_does_not_attack_until_it_reaches_the_player) {
@@ -600,6 +637,238 @@ DUNGEON_TEST(game, the_player_dies_when_an_enemy_reduces_health_to_zero) {
     REQUIRE(game.player() != nullptr);
     CHECK(game.player()->alive());
     CHECK_EQ(game.player()->stats().hp, 100);
+}
+
+DUNGEON_TEST(game, descending_every_five_dungeons_levels_up_and_builds_a_store_map) {
+    Game game(80, 30);
+
+    REQUIRE(game.player() != nullptr);
+    CHECK_EQ(game.depth(), 1U);
+    CHECK(!game.store_level());
+    CHECK(!game.store_open());
+
+    const auto start = game.player()->stats();
+
+    for (int i = 0; i < 4; ++i) {
+        game.descend();
+    }
+
+    CHECK_EQ(game.depth(), 5U);
+    CHECK(game.store_level());
+    CHECK(!game.store_open());
+    CHECK_EQ(game.player()->stats().level, start.level + 1);
+    CHECK_EQ(game.player()->stats().attack,
+             start.attack + dungeon::map::entities::LEVEL_UP_ATTACK_BONUS);
+    CHECK_EQ(game.player()->stats().defence,
+             start.defence + dungeon::map::entities::LEVEL_UP_DEFENCE_BONUS);
+    CHECK_EQ(game.player()->stats().stamina,
+             start.stamina + dungeon::map::entities::LEVEL_UP_STAMINA_BONUS);
+    CHECK_EQ(game.player()->stats().hp, dungeon::map::entities::PLAYER_MAX_HP);
+
+    CHECK(!game.player()->has_key());
+    CHECK(game.map().exit_unlocked());
+
+    std::size_t shopkeepers = 0;
+    std::size_t stands      = 0;
+    std::size_t enemies     = 0;
+
+    for (const dungeon::map::EntityPtr& entity : game.map().entity_ptrs()) {
+        if (dynamic_cast<const dungeon::map::entities::Shopkeeper*>(entity.get()) != nullptr) {
+            ++shopkeepers;
+        }
+        if (dynamic_cast<const dungeon::map::entities::StoreStand*>(entity.get()) != nullptr) {
+            ++stands;
+        }
+        if (dynamic_cast<const dungeon::map::entities::Enemy*>(entity.get()) != nullptr) {
+            ++enemies;
+        }
+    }
+
+    CHECK_EQ(shopkeepers, 1U);
+    CHECK_EQ(stands, 1U);
+    CHECK_EQ(enemies, 0U);
+}
+
+DUNGEON_TEST(game, the_shop_menu_opens_only_near_the_shopkeeper) {
+    Game game(80, 30);
+    REQUIRE(game.player() != nullptr);
+
+    for (int i = 0; i < 4; ++i) {
+        game.descend();
+    }
+
+    REQUIRE(game.store_level());
+    CHECK(game.nearby_shopkeeper() == nullptr);
+
+    const dungeon::map::entities::Shopkeeper* shopkeeper = nullptr;
+    for (const dungeon::map::EntityPtr& entity : game.map().entity_ptrs()) {
+        if (const auto* candidate =
+                dynamic_cast<const dungeon::map::entities::Shopkeeper*>(entity.get())) {
+            shopkeeper = candidate;
+        }
+    }
+
+    REQUIRE(shopkeeper != nullptr);
+    game.player()->place(shopkeeper->x, shopkeeper->y + dungeon::game::kShopkeeperReach);
+
+    REQUIRE(game.nearby_shopkeeper() != nullptr);
+    CHECK(!game.store_open());
+
+    game.open_store();
+    CHECK(game.store_open());
+
+    game.close_store();
+    CHECK(!game.store_open());
+}
+
+DUNGEON_TEST(game, stepping_into_the_open_store_exit_continues_to_the_next_dungeon) {
+    Game game(80, 30);
+    REQUIRE(game.player() != nullptr);
+
+    for (int i = 0; i < 4; ++i) {
+        game.descend();
+    }
+
+    REQUIRE(game.store_level());
+    const dungeon::map::Point exit = game.map().exit();
+    game.player()->place(exit.x, exit.y + 1);
+
+    CHECK(game.move(Direction::Up));
+
+    CHECK_EQ(game.depth(), 6U);
+    CHECK(!game.store_level());
+    CHECK(!game.store_open());
+    CHECK(!game.player()->has_key());
+    CHECK(!game.map().exit_unlocked());
+    REQUIRE(game.player() != nullptr);
+    CHECK_EQ(game.player()->x, game.map().entrance().x);
+    CHECK_EQ(game.player()->y, game.map().entrance().y);
+}
+
+DUNGEON_TEST(game, a_store_upgrade_costs_gold_and_raises_the_matching_stat) {
+    Game game(80, 30);
+    REQUIRE(game.player() != nullptr);
+
+    for (int i = 0; i < 4; ++i) {
+        game.descend();
+    }
+
+    REQUIRE(game.store_level());
+    REQUIRE(!game.store_items().empty());
+
+    game.open_store();
+    REQUIRE(game.store_open());
+    game.player()->stats().gold = 100;
+
+    const dungeon::game::StoreItem item    = game.store_items().front();
+    const int                    gold    = game.player()->stats().gold;
+    const int                    attack  = game.player()->stats().attack;
+    const int                    defence = game.player()->stats().defence;
+    const int                    stamina = game.player()->stats().stamina;
+
+    CHECK(game.buy_store_item(0));
+
+    CHECK_EQ(game.player()->stats().gold, gold - item.price);
+    CHECK_EQ(game.player()->stats().attack,
+             attack + (item.kind == ItemKind::Sword || item.kind == ItemKind::Greatsword ? 2 : 0));
+    CHECK_EQ(game.player()->stats().defence,
+             defence + (item.kind == ItemKind::Shield ? 2 : 0));
+    CHECK_EQ(game.player()->stats().stamina,
+             stamina + (item.kind == ItemKind::Boots ? 2 : 0));
+    CHECK(game.store_item_sold(0));
+    CHECK(game.player()->has_item(item.kind));
+
+    CHECK(!game.buy_store_item(0));
+    REQUIRE(!game.messages().empty());
+    CHECK(game.messages().back().find("already sold") != std::string::npos);
+}
+
+DUNGEON_TEST(game, buying_owned_equipment_upgrades_it_without_duplicating_it) {
+    Game game(80, 30);
+    REQUIRE(game.player() != nullptr);
+    game.player()->stats().gold = 100;
+
+    for (int i = 0; i < 4; ++i) {
+        game.descend();
+    }
+
+    REQUIRE(game.store_level());
+    game.open_store();
+    REQUIRE(game.buy_store_item(0));
+    game.close_store();
+
+    REQUIRE(game.player()->has_item(ItemKind::Sword));
+    const std::size_t inventory_size = game.player()->inventory().size();
+
+    std::size_t swords = 0;
+    std::size_t level  = 0;
+
+    for (const dungeon::map::entities::Item& item : game.player()->inventory()) {
+        if (item.kind() == ItemKind::Sword) {
+            ++swords;
+            level = item.level();
+        }
+    }
+
+    CHECK_EQ(swords, 1U);
+    CHECK_EQ(level, 1U);
+
+    for (int i = 0; i < 5; ++i) {
+        game.descend();
+    }
+
+    REQUIRE(game.store_level());
+    game.open_store();
+
+    const int attack_before_upgrade = game.player()->stats().attack;
+
+    REQUIRE(game.buy_store_item(0));
+
+    CHECK_EQ(game.player()->inventory().size(), inventory_size);
+    CHECK_EQ(game.player()->stats().attack, attack_before_upgrade + 2);
+
+    swords = 0;
+    level  = 0;
+
+    for (const dungeon::map::entities::Item& item : game.player()->inventory()) {
+        if (item.kind() == ItemKind::Sword) {
+            ++swords;
+            level = item.level();
+        }
+    }
+
+    CHECK_EQ(swords, 1U);
+    CHECK_EQ(level, 2U);
+
+    const int attack_before_drop = game.player()->stats().attack;
+    game.player()->drop(ItemKind::Sword);
+    CHECK_EQ(game.player()->stats().attack, attack_before_drop - 4);
+    CHECK(!game.player()->has_item(ItemKind::Sword));
+}
+
+DUNGEON_TEST(game, an_unaffordable_store_upgrade_is_not_sold) {
+    Game game(80, 30);
+    REQUIRE(game.player() != nullptr);
+
+    for (int i = 0; i < 4; ++i) {
+        game.descend();
+    }
+
+    REQUIRE(game.store_level());
+    REQUIRE(!game.store_items().empty());
+
+    game.open_store();
+    game.player()->stats().gold = 0;
+
+    CHECK(!game.buy_store_item(0));
+    CHECK_EQ(game.player()->stats().gold, 0);
+    CHECK(!game.store_item_sold(0));
+    REQUIRE(!game.messages().empty());
+    CHECK(game.messages().back().find("cannot afford") != std::string::npos);
+
+    game.close_store();
+    CHECK(!game.store_open());
+    CHECK(!game.buy_store_item(0));
 }
 
 DUNGEON_TEST(game, direction_from_key_maps_wasd_in_both_cases) {

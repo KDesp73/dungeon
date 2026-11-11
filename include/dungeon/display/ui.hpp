@@ -41,6 +41,9 @@ struct HudState {
 
     /// Index of the highlighted chest item.
     std::size_t selected_chest_item = 0;
+
+    /// Dungeon number shown in the stats panel.
+    std::size_t dungeon_depth = 1;
 };
 
 /// Splits a framebuffer of @p width by @p height into the game UI regions.
