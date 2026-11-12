@@ -137,33 +137,53 @@ std::size_t enemy_count(const dungeon::map::Map& map) {
 }
 
 /// Draws item slots in the style shared by the inventory and chest panels.
+///
+/// Slots are laid out in as few rows as fit the panel; a fixed set of slots that
+/// is wider than the panel is split into balanced rows instead of being
+/// truncated.
 void draw_item_slots(FrameBuffer& buffer, const Rect& rect,
-                     const std::vector<dungeon::map::entities::Item>* items, std::size_t first,
-                     std::size_t selected, bool has_selection) {
-    const std::size_t slot_count = std::min<std::size_t>((rect.width - 4) / 4, 10);
-    const std::size_t y          = rect.y + 2;
-    std::size_t       column     = rect.x + 2;
+                     const std::vector<dungeon::map::entities::Item>* items,
+                     std::size_t slot_count, std::size_t first, std::size_t selected,
+                     bool has_selection) {
+    if (slot_count == 0 || rect.width <= 4) {
+        return;
+    }
+
+    const std::size_t per_row_max = std::max<std::size_t>((rect.width - 4) / 4, 1);
+    std::size_t       per_row     = per_row_max;
+
+    if (slot_count > per_row) {
+        const std::size_t rows = (slot_count + per_row - 1) / per_row;
+        per_row                = (slot_count + rows - 1) / rows;
+    }
+
+    const std::size_t top    = rect.y + 2;
+    const std::size_t bottom = rect.y + rect.height - 1;
 
     for (std::size_t i = 0; i < slot_count; ++i) {
-        if (i > 0) {
-            ++column;
+        const std::size_t row = i / per_row;
+
+        if (top + row >= bottom) {
+            break;
         }
 
+        const std::size_t column      = rect.x + 2 + (i % per_row) * 4;
+        const std::size_t y           = top + row;
         const std::size_t index       = first + i;
         const bool        is_selected = has_selection && index == selected;
         const CellStyle   slot_style  = is_selected ? kSelectionStyle : CellStyle{};
 
-        buffer.draw(column++, y, '[', slot_style);
+        buffer.draw(column, y, '[', slot_style);
 
         if (items != nullptr && index < items->size()) {
             const dungeon::map::entities::Item& item = (*items)[index];
-            buffer.draw(column++, y, item.tile(),
+            buffer.draw(column + 1, y, item.tile(),
                         is_selected ? kSelectionStyle : entity_style(item));
         } else {
-            buffer.draw(column++, y, ' ', slot_style);
+            buffer.draw(column + 1, y, ' ', slot_style);
         }
 
-        buffer.draw(column++, y, ']', slot_style);
+        buffer.draw(column + 2, y, ']', slot_style);
     }
 }
 
@@ -232,7 +252,8 @@ void draw_inventory(FrameBuffer& buffer, const Rect& rect,
     const std::vector<dungeon::map::entities::Item>* items =
         player != nullptr ? &player->inventory() : nullptr;
 
-    draw_item_slots(buffer, rect, items, 0, 0, false);
+    draw_item_slots(buffer, rect, items, dungeon::map::entities::PLAYER_INVENTORY_SLOTS, 0, 0,
+                    false);
 }
 
 void draw_messages(FrameBuffer& buffer, const Rect& rect, std::span<const std::string> messages) {
@@ -282,7 +303,7 @@ void draw_chest(FrameBuffer& buffer, const Rect& rect, const dungeon::map::entit
     const std::size_t slot_count     = std::min<std::size_t>((rect.width - 4) / 4, 10);
     const std::size_t first = selected_index >= slot_count ? selected_index - slot_count + 1 : 0;
 
-    draw_item_slots(buffer, rect, &chest->contents(), first, selected_index, true);
+    draw_item_slots(buffer, rect, &chest->contents(), slot_count, first, selected_index, true);
 }
 
 } // namespace

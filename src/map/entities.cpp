@@ -39,7 +39,7 @@ void Entity::place(std::size_t xx, std::size_t yy) {
     this->y = yy;
 }
 
-void Player::equip(Item item) {
+bool Player::equip(Item item) {
     if (item.upgradable()) {
         const auto existing =
             std::find_if(_inventory.begin(), _inventory.end(), [&item](const Item& candidate) {
@@ -47,16 +47,20 @@ void Player::equip(Item item) {
             });
 
         if (existing != _inventory.end()) {
-            existing->upgrade(stats());
-            return;
+            return existing->upgrade(stats());
         }
     }
 
+    if (inventory_full()) {
+        return false;
+    }
+
     if (!item.equip(stats())) {
-        return;
+        return false;
     }
 
     _inventory.push_back(std::move(item));
+    return true;
 }
 
 void Player::drop(ItemKind kind) {

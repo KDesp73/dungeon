@@ -173,7 +173,7 @@ DUNGEON_TEST(scene, game_scene_updates_the_enemy_simulation) {
 
     manager.update(std::chrono::milliseconds(2000), context);
 
-    CHECK_EQ(scene->game().player()->stats().hp, hp_before - 1);
+    CHECK_EQ(scene->game().player()->stats().hp, hp_before - 5);
 }
 
 DUNGEON_TEST(scene, game_scene_restarts_after_the_player_dies) {

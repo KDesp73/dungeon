@@ -29,6 +29,8 @@
             border: 1px solid #333;
             border-radius: 6px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            max-width: 100%;
+            overflow: auto;
         }
     </style>
     <!-- Include xterm.js stylesheets and scripts via CDN -->
@@ -42,14 +44,28 @@
     </div>
 
     <script>
-        // Initialize xterm.js terminal instance
+        // The C++ build renders a fixed 100 x 30 character grid (see
+        // src/display/term.cpp), so the xterm.js instance must match it exactly.
+        const TERM_COLS = 100;
+        const TERM_ROWS = 30;
+
+        // Key kinds understood by dungeon_push_key(kind, value).
+        const KEY_UP = 1;
+        const KEY_DOWN = 2;
+        const KEY_LEFT = 3;
+        const KEY_RIGHT = 4;
+        const KEY_ESCAPE = 5;
+
         const term = new Terminal({
             cursorBlink: true,
-            rows: 24,
-            cols: 80,
+            rows: TERM_ROWS,
+            cols: TERM_COLS,
+            // The game emits '\n' between frame rows. With convertEol xterm
+            // resets the column too, so rows line up instead of drifting right.
+            convertEol: true,
             theme: {
                 background: '#050505',
-                foreground: '#00ff66',
+                foreground: '#ffffff',
                 cursor: '#00ff66'
             }
         });
@@ -57,30 +73,77 @@
         term.open(document.getElementById('terminal'));
         term.focus();
 
-        // Capture keystrokes and send them to the exported C++ function `_dungeon_push_key`
+        // Emscripten keeps any object assigned to Module and fills in the
+        // runtime fields on top of it.
+        var Module = {
+            print: function(text) {
+                console.log(text);
+            },
+            printErr: function(text) {
+                console.error(text);
+            },
+            locateFile: function(path) {
+                return path;
+            },
+            // Called from FrameBuffer::present() with one complete ANSI frame.
+            dungeonWriteFrame: function(text) {
+                term.write(text);
+            }
+        };
+
+        function pushKey(kind, value) {
+            if (typeof Module !== 'undefined' &&
+                typeof Module._dungeon_push_key === 'function') {
+                Module._dungeon_push_key(kind, value);
+            }
+        }
+
+        // Map xterm's byte sequences to the game's logical key codes.
         term.onData(data => {
-            if (window.Module && typeof window.Module._dungeon_push_key === 'function') {
-                for (let i = 0; i < data.length; i++) {
-                    window.Module._dungeon_push_key(data.charCodeAt(i));
+            let index = 0;
+
+            while (index < data.length) {
+                const sequence = data.slice(index, index + 3);
+
+                if (sequence === '\x1b[A' || sequence === '\x1bOA') {
+                    pushKey(KEY_UP, 0);
+                    index += 3;
+                    continue;
                 }
+                if (sequence === '\x1b[B' || sequence === '\x1bOB') {
+                    pushKey(KEY_DOWN, 0);
+                    index += 3;
+                    continue;
+                }
+                if (sequence === '\x1b[C' || sequence === '\x1bOC') {
+                    pushKey(KEY_RIGHT, 0);
+                    index += 3;
+                    continue;
+                }
+                if (sequence === '\x1b[D' || sequence === '\x1bOD') {
+                    pushKey(KEY_LEFT, 0);
+                    index += 3;
+                    continue;
+                }
+
+                const character = data[index];
+
+                if (character === '\x1b') {
+                    pushKey(KEY_ESCAPE, 0);
+                    index += 1;
+                    continue;
+                }
+
+                const codePoint = data.codePointAt(index);
+                const glyph = String.fromCodePoint(codePoint);
+                pushKey(0, codePoint);
+                index += glyph.length;
             }
         });
 
-        // Setup Emscripten Module configuration
-        var Module = {
-            print: (function() {
-                return function(text) {
-                    console.log(text);
-                    term.writeln(text);
-                };
-            })(),
-            printErr: function(text) {
-                console.error(text);
-                term.writeln(text);
-            },
-            locateFile: function(path, scriptDirectory) {
-                return path;
-            }
+        // Give the terminal keyboard focus after the runtime has started.
+        Module.onRuntimeInitialized = function() {
+            term.focus();
         };
     </script>
 

@@ -285,7 +285,7 @@ void Map::walkway(std::size_t start_x, std::size_t start_y, std::size_t end_x, s
     }
 }
 
-MapSpec Map::make_spec(std::size_t width, std::size_t height) {
+MapSpec Map::make_spec(std::size_t width, std::size_t height, std::size_t depth) {
     MapSpec spec;
     spec.width  = width;
     spec.height = height;
@@ -293,6 +293,8 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height) {
     if (width == 0 || height == 0) {
         return spec;
     }
+
+    const std::size_t spawn_depth = depth == 0 ? 1 : depth;
 
     constexpr std::size_t margin          = 2;
     constexpr std::size_t grid_columns    = 3;
@@ -549,9 +551,9 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height) {
             free_cells.pop_back();
         }
 
-        const double enemy_probability = room_index == entrance_room
-                                             ? chance::ENEMY_ENTRANCE_ROOM_PRESENT
-                                             : chance::ENEMY_ROOM_PRESENT;
+        const double enemy_probability =
+            room_index == entrance_room ? chance::enemy_entrance_room_present(spawn_depth)
+                                        : chance::enemy_room_present(spawn_depth);
 
         if (!free_cells.empty() && _chance.roll(enemy_probability)) {
             static constexpr double enemy_weights[] = {chance::FAST_ENEMY_WEIGHT,
@@ -559,7 +561,8 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height) {
                                                        chance::BRUTE_ENEMY_WEIGHT};
 
             const std::size_t enemy_count =
-                _chance.range(chance::ENEMY_MIN_PER_ROOM, chance::ENEMY_MAX_PER_ROOM);
+                _chance.range(chance::ENEMY_MIN_PER_ROOM,
+                              chance::enemy_max_per_room(spawn_depth));
 
             for (std::size_t i = 0; i < enemy_count && !free_cells.empty(); ++i) {
                 const std::size_t index = _chance.range(0, free_cells.size() - 1);
@@ -713,8 +716,8 @@ void Map::generate(const MapSpec& spec) {
     }
 }
 
-void Map::generate(std::size_t width, std::size_t height) {
-    generate(make_spec(width, height));
+void Map::generate(std::size_t width, std::size_t height, std::size_t depth) {
+    generate(make_spec(width, height, depth));
 }
 
 } // namespace dungeon::map

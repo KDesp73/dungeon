@@ -35,14 +35,63 @@ inline constexpr double CHEST_LOOT_KEY = 0.05;
 /// Probability that a cell in the 3x3 room grid contains a room.
 inline constexpr double ROOM_PRESENT = 0.75;
 
-/// Probability that a room contains at least one enemy.
-inline constexpr double ENEMY_ROOM_PRESENT = 0.85;
-/// Probability that the player's starting room contains at least one enemy.
-inline constexpr double ENEMY_ENTRANCE_ROOM_PRESENT = 0.35;
+/// Probability that a room contains at least one enemy in the first dungeon.
+inline constexpr double ENEMY_ROOM_PRESENT_BASE = 0.30;
+/// Added to the enemy-room probability for every dungeon below the first.
+inline constexpr double ENEMY_ROOM_PRESENT_STEP = 0.05;
+/// Upper bound for the enemy-room probability.
+inline constexpr double ENEMY_ROOM_PRESENT_MAX = 0.85;
+
+/// Probability that the player's starting room contains an enemy in the first dungeon.
+inline constexpr double ENEMY_ENTRANCE_ROOM_PRESENT_BASE = 0.0;
+/// Added to the starting-room probability for every dungeon below the first.
+inline constexpr double ENEMY_ENTRANCE_ROOM_PRESENT_STEP = 0.07;
+/// Upper bound for the starting-room probability.
+inline constexpr double ENEMY_ENTRANCE_ROOM_PRESENT_MAX = 0.35;
+
 /// Minimum number of enemies rolled for a room that contains enemies.
 inline constexpr std::size_t ENEMY_MIN_PER_ROOM = 1;
-/// Maximum number of enemies rolled for a room that contains enemies.
-inline constexpr std::size_t ENEMY_MAX_PER_ROOM = 3;
+/// Maximum number of enemies a room can roll in the first dungeons.
+inline constexpr std::size_t ENEMY_MAX_PER_ROOM_EARLY = 1;
+/// Maximum number of enemies a room can roll in deeper dungeons.
+inline constexpr std::size_t ENEMY_MAX_PER_ROOM_LATE = 2;
+/// Depth from which rooms can roll the larger enemy group.
+///
+/// This happens after the first store and level-up, so the larger groups do not
+/// arrive before the player has had a chance to improve their stats.
+inline constexpr std::size_t ENEMY_MAX_PER_ROOM_DEPTH = 6;
+
+/// Returns @p base plus @p step for every depth below the first.
+///
+/// The result never exceeds @p maximum, so enemy density ramps up gradually
+/// instead of jumping to its final value.
+[[nodiscard]] constexpr double scale_probability(double base, double step, double maximum,
+                                                 std::size_t depth) noexcept {
+    if (depth <= 1) {
+        return base;
+    }
+
+    const double scaled = base + step * static_cast<double>(depth - 1);
+    return scaled > maximum ? maximum : scaled;
+}
+
+/// Probability that a non-entrance room contains enemies at @p depth.
+[[nodiscard]] constexpr double enemy_room_present(std::size_t depth) noexcept {
+    return scale_probability(ENEMY_ROOM_PRESENT_BASE, ENEMY_ROOM_PRESENT_STEP,
+                             ENEMY_ROOM_PRESENT_MAX, depth);
+}
+
+/// Probability that the entrance room contains enemies at @p depth.
+[[nodiscard]] constexpr double enemy_entrance_room_present(std::size_t depth) noexcept {
+    return scale_probability(ENEMY_ENTRANCE_ROOM_PRESENT_BASE,
+                             ENEMY_ENTRANCE_ROOM_PRESENT_STEP,
+                             ENEMY_ENTRANCE_ROOM_PRESENT_MAX, depth);
+}
+
+/// Maximum number of enemies a room can roll at @p depth.
+[[nodiscard]] constexpr std::size_t enemy_max_per_room(std::size_t depth) noexcept {
+    return depth >= ENEMY_MAX_PER_ROOM_DEPTH ? ENEMY_MAX_PER_ROOM_LATE : ENEMY_MAX_PER_ROOM_EARLY;
+}
 
 /// Relative weight for placing the key in the player's starting room.
 inline constexpr double KEY_SAME_ROOM_WEIGHT = 0.1;

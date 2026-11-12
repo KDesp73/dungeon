@@ -137,13 +137,14 @@ class Map {
     /// Replaces the generator seed and restarts the random sequence.
     void reseed(std::uint32_t seed) noexcept { _chance.reseed(seed); }
 
-    /// Builds a random dungeon.
+    /// Builds a random dungeon for dungeon @p depth.
     ///
     /// The number, positions, and dimensions of the rooms vary on every call.
+    /// Enemy density grows with @p depth, starting sparse in the first dungeon.
     /// If the requested dimensions are too small to contain a valid dungeon,
     /// the map is left as open background. The map never exceeds @p width by
     /// @p height.
-    void generate(std::size_t width = 64, std::size_t height = 32);
+    void generate(std::size_t width = 64, std::size_t height = 32, std::size_t depth = 1);
 
     /// Builds the dungeon described by @p spec.
     ///
@@ -160,9 +161,11 @@ class Map {
     /// Rooms are placed on an optional 3x3 grid, with slight random variation
     /// in their size and position, and connected by horizontal or vertical
     /// walkways. The spec includes an entrance, a distant exit, and the items
-    /// rolled for each room. Pass the result to `generate(const MapSpec&)` to
+    /// rolled for each room. Enemy density grows with @p depth, starting sparse
+    /// in the first dungeon. Pass the result to `generate(const MapSpec&)` to
     /// build it.
-    [[nodiscard]] MapSpec make_spec(std::size_t width = 64, std::size_t height = 32);
+    [[nodiscard]] MapSpec make_spec(std::size_t width = 64, std::size_t height = 32,
+                                    std::size_t depth = 1);
 
     /// Creates the layout of a store level.
     ///

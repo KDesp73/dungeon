@@ -166,6 +166,9 @@ int main(int argc, char** argv) {
 
     dungeon::display::tui::show_cursor();
 #else
+    static_cast<void>(argc);
+    static_cast<void>(argv);
+
     // The browser supplies keys through `dungeon_push_key()` instead of argv
     // and a terminal, so there is nothing to parse here. The object is kept
     // alive for the lifetime of the page.

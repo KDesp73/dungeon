@@ -48,6 +48,10 @@ inline constexpr int PLAYER_MAX_HP = 100;
 /// Stamina the player starts with. Only stamina above this value adds health.
 inline constexpr int PLAYER_BASE_STAMINA = 10;
 
+/// Number of item slots the player carries. Equipment that is already owned
+/// can still be upgraded when every slot is full.
+inline constexpr std::size_t PLAYER_INVENTORY_SLOTS = 10;
+
 /// Extra maximum health granted by each point of stamina above the base.
 inline constexpr int STAMINA_HP_BONUS = 2;
 
@@ -148,12 +152,16 @@ inline constexpr EnemyProfile kEnemyProfiles[] = {
     //Name  Glyph Color              HP  AT  DE  g  G  MI    ATI  AR  SL
     {"Rat", 'r', Color::BrightGreen, 8,  5,  2,  1, 2, 0.22, 0.9, 7, "Fast"},
     {"Goblin", 'g', Color::Yellow  , 24, 10, 6,  2, 4, 0.45, 1.1, 6, "Normal"},
-    {"Ogre", 'O', Color::BrightRed , 60, 25, 40, 4, 8, 0.85, 1.4, 5, "Slow"},
+    {"Ogre", 'O', Color::BrightRed , 60, 25, 4,  4, 8, 0.85, 1.4, 5, "Slow"},
 };
 
 /// Enemy stat gains per dungeon below the first.
+///
+/// Attack grows slowly so that the player's defence upgrades and level-ups stay
+/// meaningful. A faster attack curve makes late dungeons lethal regardless of
+/// how much equipment the player has bought.
 inline constexpr int ENEMY_HP_PER_DEPTH      = 3;
-inline constexpr int ENEMY_ATTACK_PER_DEPTH  = 2;
+inline constexpr int ENEMY_ATTACK_PER_DEPTH  = 1;
 inline constexpr int ENEMY_DEFENCE_PER_DEPTH = 3; // One defence point per three depths.
 inline constexpr int ENEMY_GOLD_PER_DEPTH    = 2; // One extra coin per two depths.
 
@@ -506,6 +514,19 @@ class Player : public Entity, public Alive {
     [[nodiscard]] bool                     has_item(ItemKind kind) const;
     [[nodiscard]] bool                     has_key() const { return has_item(ItemKind::Key); }
 
+    /// True when every inventory slot is occupied.
+    [[nodiscard]] bool inventory_full() const noexcept {
+        return _inventory.size() >= PLAYER_INVENTORY_SLOTS;
+    }
+
+    /// Returns true when @p kind can be stored without exceeding the slots.
+    ///
+    /// Already owned equipment is always accepted because it is upgraded in
+    /// place rather than taking a second slot.
+    [[nodiscard]] bool can_equip(ItemKind kind) const noexcept {
+        return (is_equipment(kind) && has_item(kind)) || !inventory_full();
+    }
+
     /// Replaces the player's stats and inventory.
     ///
     /// Used when carrying the player into a freshly generated dungeon.
@@ -517,10 +538,11 @@ class Player : public Entity, public Alive {
     /// Equips @p item.
     ///
     /// When a piece of equipment of the same kind is already carried, the
-    /// existing item is upgraded instead of adding a duplicate.
-    void equip(Item item);
-    void drop(int id);
-    void drop(ItemKind kind);
+    /// existing item is upgraded instead of adding a duplicate. Returns false
+    /// when the inventory has no free slot or the item cannot be equipped.
+    [[nodiscard]] bool equip(Item item);
+    void               drop(int id);
+    void               drop(ItemKind kind);
 
   private:
     std::vector<Item> _inventory;

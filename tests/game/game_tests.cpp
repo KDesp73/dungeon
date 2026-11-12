@@ -277,6 +277,89 @@ DUNGEON_TEST(game, using_a_health_potion_without_one_does_nothing) {
     CHECK_EQ(game.messages().back(), std::string("You have no health potions."));
 }
 
+DUNGEON_TEST(game, the_inventory_holds_at_most_ten_items) {
+    MapSpec spec = make_test_spec();
+
+    for (int i = 0; i < 11; ++i) {
+        spec.items.push_back({ItemKind::HealthPotion, 4, 3});
+    }
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+
+    CHECK(game.move(Direction::Right));
+
+    CHECK_EQ(game.player()->inventory().size(),
+             dungeon::map::entities::PLAYER_INVENTORY_SLOTS);
+    CHECK(game.player()->inventory_full());
+
+    std::size_t potions_on_map = 0;
+    for (const dungeon::map::EntityPtr& entity : game.map().entity_ptrs()) {
+        if (dynamic_cast<const dungeon::map::entities::HealthPotion*>(entity.get()) != nullptr) {
+            ++potions_on_map;
+        }
+    }
+
+    CHECK_EQ(potions_on_map, 1U);
+    REQUIRE(!game.messages().empty());
+    CHECK_EQ(game.messages().back(), std::string("Your inventory is full."));
+}
+
+DUNGEON_TEST(game, a_full_inventory_blocks_buying_new_equipment) {
+    Game game(80, 30);
+    REQUIRE(game.player() != nullptr);
+
+    for (std::size_t i = 0; i < dungeon::map::entities::PLAYER_INVENTORY_SLOTS; ++i) {
+        REQUIRE(game.player()->equip(dungeon::map::entities::make_item(ItemKind::HealthPotion)));
+    }
+
+    game.player()->stats().gold = 1000;
+
+    for (int i = 0; i < 4; ++i) {
+        game.descend();
+    }
+
+    REQUIRE(game.store_level());
+    game.open_store();
+    REQUIRE(game.store_open());
+
+    const int gold_before = game.player()->stats().gold;
+
+    CHECK(!game.buy_store_item(0));
+    CHECK_EQ(game.player()->stats().gold, gold_before);
+    CHECK(!game.store_item_sold(0));
+    REQUIRE(!game.messages().empty());
+    CHECK_EQ(game.messages().back(), std::string("Your inventory is full."));
+}
+
+DUNGEON_TEST(game, a_full_inventory_still_allows_upgrading_owned_equipment) {
+    Game game(80, 30);
+    REQUIRE(game.player() != nullptr);
+
+    REQUIRE(game.player()->equip(dungeon::map::entities::make_item(ItemKind::Sword)));
+
+    for (std::size_t i = 1; i < dungeon::map::entities::PLAYER_INVENTORY_SLOTS; ++i) {
+        REQUIRE(game.player()->equip(dungeon::map::entities::make_item(ItemKind::HealthPotion)));
+    }
+
+    REQUIRE(game.player()->inventory_full());
+    game.player()->stats().gold = 1000;
+
+    for (int i = 0; i < 4; ++i) {
+        game.descend();
+    }
+
+    REQUIRE(game.store_level());
+    game.open_store();
+
+    const std::size_t inventory_size = game.player()->inventory().size();
+    const int         attack_before  = game.player()->stats().attack;
+
+    CHECK(game.buy_store_item(0));
+    CHECK_EQ(game.player()->inventory().size(), inventory_size);
+    CHECK_EQ(game.player()->stats().attack, attack_before + 2);
+}
+
 DUNGEON_TEST(game, stepping_on_the_unlocked_exit_generates_a_new_map_and_keeps_player_state) {
     MapSpec spec;
     spec.width    = 80;
@@ -513,10 +596,10 @@ DUNGEON_TEST(game, an_adjacent_enemy_attacks_the_player) {
 
     game.update(2.0);
 
-    CHECK_EQ(game.player()->stats().hp, hp_before - 3);
+    CHECK_EQ(game.player()->stats().hp, hp_before - 5);
     CHECK(!game.game_over());
     REQUIRE(!game.messages().empty());
-    CHECK_EQ(game.messages().back(), std::string("The Goblin hits you for 3."));
+    CHECK_EQ(game.messages().back(), std::string("The Goblin hits you for 5."));
 }
 
 DUNGEON_TEST(game, a_distant_enemy_does_not_attack_until_it_reaches_the_player) {
@@ -595,7 +678,7 @@ DUNGEON_TEST(game, a_brute_drops_more_coins_than_a_rat) {
     Game game(spec);
     REQUIRE(game.player() != nullptr);
 
-    for (int hit = 0; hit < 5; ++hit) {
+    for (int hit = 0; hit < 20 && game.nearest_enemy() != nullptr; ++hit) {
         CHECK(game.move(Direction::Right));
     }
 
@@ -663,7 +746,7 @@ DUNGEON_TEST(game, descending_every_five_dungeons_levels_up_and_builds_a_store_m
              start.defence + dungeon::map::entities::LEVEL_UP_DEFENCE_BONUS);
     CHECK_EQ(game.player()->stats().stamina,
              start.stamina + dungeon::map::entities::LEVEL_UP_STAMINA_BONUS);
-    CHECK_EQ(game.player()->stats().hp, dungeon::map::entities::PLAYER_MAX_HP);
+    CHECK_EQ(game.player()->stats().hp, dungeon::map::entities::max_hp(game.player()->stats()));
 
     CHECK(!game.player()->has_key());
     CHECK(game.map().exit_unlocked());
@@ -781,6 +864,34 @@ DUNGEON_TEST(game, a_store_upgrade_costs_gold_and_raises_the_matching_stat) {
     CHECK(!game.buy_store_item(0));
     REQUIRE(!game.messages().empty());
     CHECK(game.messages().back().find("already sold") != std::string::npos);
+}
+
+DUNGEON_TEST(game, store_prices_rise_with_each_store_visit) {
+    Game game(80, 30);
+    REQUIRE(game.player() != nullptr);
+
+    for (int i = 0; i < 4; ++i) {
+        game.descend();
+    }
+
+    REQUIRE(game.store_level());
+    REQUIRE(!game.store_items().empty());
+
+    std::vector<int> first_prices;
+    for (const dungeon::game::StoreItem& item : game.store_items()) {
+        first_prices.push_back(item.price);
+    }
+
+    for (int i = 0; i < 5; ++i) {
+        game.descend();
+    }
+
+    REQUIRE(game.store_level());
+    REQUIRE(game.store_items().size() == first_prices.size());
+
+    for (std::size_t i = 0; i < first_prices.size(); ++i) {
+        CHECK(game.store_items()[i].price > first_prices[i]);
+    }
 }
 
 DUNGEON_TEST(game, buying_owned_equipment_upgrades_it_without_duplicating_it) {

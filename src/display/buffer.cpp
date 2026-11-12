@@ -236,6 +236,10 @@ void FrameBuffer::present() {
 #ifdef __EMSCRIPTEN__
     // Hand the rendered ANSI frame to the browser shell, which writes it into
     // xterm.js. Writing to stdout would only reach the developer console.
+    // EM_ASM's `$0` placeholders are valid, but Clang warns about the dollar
+    // sign in an otherwise C++ translation unit.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdollar-in-identifier-extension"
     EM_ASM(
         {
             if (typeof Module !== 'undefined' && Module.dungeonWriteFrame) {
@@ -243,6 +247,7 @@ void FrameBuffer::present() {
             }
         },
         frame.data(), static_cast<int>(frame.size()));
+#pragma clang diagnostic pop
 #else
     std::fwrite(frame.data(), sizeof(char), frame.size(), stdout);
     std::fflush(stdout);

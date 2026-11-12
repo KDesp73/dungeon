@@ -141,6 +141,33 @@ DUNGEON_TEST(display, ui_shows_a_health_potion_in_the_inventory) {
     CHECK_EQ(buffer.at(x + 2, y), ']');
 }
 
+DUNGEON_TEST(display, ui_always_draws_ten_inventory_slots) {
+    Game game(make_key_spec());
+    REQUIRE(game.player() != nullptr);
+
+    for (std::size_t i = 0; i < dungeon::map::entities::PLAYER_INVENTORY_SLOTS; ++i) {
+        REQUIRE(game.player()->equip(
+            dungeon::map::entities::make_item(dungeon::map::entities::ItemKind::HealthPotion)));
+    }
+
+    FrameBuffer  buffer(100, 30);
+    const Layout layout = make_layout(buffer.width(), buffer.height());
+    dungeon::display::tui::draw_ui(buffer, game.map(), layout);
+
+    std::size_t slots = 0;
+    for (std::size_t y = layout.inventory.y + 1; y + 1 < layout.inventory.y + layout.inventory.height;
+         ++y) {
+        for (std::size_t x = layout.inventory.x + 1;
+             x + 1 < layout.inventory.x + layout.inventory.width; ++x) {
+            if (buffer.at(x, y) == '[') {
+                ++slots;
+            }
+        }
+    }
+
+    CHECK_EQ(slots, dungeon::map::entities::PLAYER_INVENTORY_SLOTS);
+}
+
 DUNGEON_TEST(display, ui_shows_the_contents_of_a_nearby_chest) {
     MapSpec spec = make_key_spec();
     spec.items   = {{ItemKind::Chest,
@@ -255,10 +282,10 @@ DUNGEON_TEST(display, ui_shows_the_nearest_enemy_stats_in_the_right_panel) {
         if (text.find("Rat (Fast)") != std::string::npos) {
             found_name = true;
         }
-        if (text.find("Attack:   2") != std::string::npos) {
+        if (text.find("Attack:   5") != std::string::npos) {
             found_attack = true;
         }
-        if (text.find("Defense:  1") != std::string::npos) {
+        if (text.find("Defense:  2") != std::string::npos) {
             found_defence = true;
         }
     }

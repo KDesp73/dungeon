@@ -69,6 +69,23 @@ std::span<const StoreItem> store_catalog() noexcept {
     return items;
 }
 
+/// Returns the store catalog with prices raised for the given store visit.
+///
+/// The first visit uses the base prices. Every later visit adds
+/// `kStorePriceGrowthPercent` of each base price, rounded to the nearest gold.
+std::vector<StoreItem> store_catalog_for_visit(std::size_t visit) {
+    std::vector<StoreItem> items(store_catalog().begin(), store_catalog().end());
+    const long long        steps = visit > 1 ? static_cast<long long>(visit - 1) : 0;
+
+    for (StoreItem& item : items) {
+        const long long increase =
+            (static_cast<long long>(item.price) * kStorePriceGrowthPercent * steps + 50) / 100;
+        item.price += static_cast<int>(increase);
+    }
+
+    return items;
+}
+
 } // namespace
 
 Offset offset(Direction direction) noexcept {
@@ -140,8 +157,10 @@ void Game::generate(std::size_t width, std::size_t height) {
     _depth           = 1;
     _store_level     = false;
     _store_open      = false;
-    _store_sold.assign(store_catalog().size(), false);
-    _game_over       = false;
+    _store_items.clear();
+    _store_sold.clear();
+    _store_visits = 0;
+    _game_over    = false;
     push_message("You enter the dungeon.");
 }
 
@@ -152,8 +171,10 @@ void Game::generate(const map::MapSpec& spec) {
     _depth           = 1;
     _store_level     = false;
     _store_open      = false;
-    _store_sold.assign(store_catalog().size(), false);
-    _game_over       = false;
+    _store_items.clear();
+    _store_sold.clear();
+    _store_visits = 0;
+    _game_over    = false;
     push_message("You enter the dungeon.");
 }
 
@@ -570,14 +591,19 @@ void Game::descend() {
         map::MapSpec spec = _map.make_store_spec(width, height);
 
         if (spec.rooms.empty()) {
-            spec        = _map.make_spec(width, height);
+            spec        = _map.make_spec(width, height, next_depth);
             store_level = false;
+        } else {
+            ++_store_visits;
+            _store_items = store_catalog_for_visit(_store_visits);
         }
 
         _map.generate(spec);
-        _store_sold.assign(store_catalog().size(), false);
+        _store_sold.assign(_store_items.size(), false);
     } else {
-        _map.generate(width, height);
+        _map.generate(width, height, next_depth);
+        _store_items.clear();
+        _store_sold.clear();
     }
 
     _depth           = next_depth;
@@ -621,7 +647,7 @@ void Game::scale_enemies_for_depth() {
 }
 
 std::span<const StoreItem> Game::store_items() const noexcept {
-    return store_catalog();
+    return _store_items;
 }
 
 bool Game::store_item_sold(std::size_t index) const noexcept {
@@ -629,14 +655,13 @@ bool Game::store_item_sold(std::size_t index) const noexcept {
 }
 
 bool Game::buy_store_item(std::size_t index) {
-    auto*      player = _map.player();
-    const auto items  = store_catalog();
+    auto* player = _map.player();
 
-    if (player == nullptr || !_store_open || index >= items.size()) {
+    if (player == nullptr || !_store_open || index >= _store_items.size()) {
         return false;
     }
 
-    const StoreItem& item = items[index];
+    const StoreItem& item = _store_items[index];
 
     if (store_item_sold(index)) {
         push_message("The " + item.name + " is already sold.");
@@ -650,8 +675,13 @@ bool Game::buy_store_item(std::size_t index) {
 
     const bool owned = player->has_item(item.kind);
 
+    if (!player->can_equip(item.kind)) {
+        push_message("Your inventory is full.");
+        return false;
+    }
+
     player->stats().gold -= item.price;
-    player->equip(map::entities::make_item(item.kind));
+    static_cast<void>(player->equip(map::entities::make_item(item.kind)));
     _store_sold[index] = true;
 
     push_message((owned ? "Upgraded the " : "Bought the ") + item.name + " for " +
@@ -763,6 +793,16 @@ bool Game::take_selected_chest_item() {
         _chest_selection = chest->contents().size() - 1;
     }
 
+    const map::entities::ItemKind selected_kind = chest->contents()[_chest_selection].kind();
+    const bool selected_is_currency = selected_kind == map::entities::ItemKind::Coin ||
+                                      selected_kind == map::entities::ItemKind::CoinDouble ||
+                                      selected_kind == map::entities::ItemKind::Diamond;
+
+    if (!selected_is_currency && !player->can_equip(selected_kind)) {
+        push_message("Your inventory is full.");
+        return false;
+    }
+
     std::optional<map::entities::Item> item = chest->take(_chest_selection);
     if (!item) {
         return false;
@@ -776,7 +816,13 @@ bool Game::take_selected_chest_item() {
         push_message("+" + std::to_string(gold) + " gold");
     } else {
         const map::entities::ItemKind kind = item->kind();
-        player->equip(*item);
+
+        if (!player->equip(*item)) {
+            chest->add(std::move(*item));
+            push_message("Your inventory is full.");
+            return false;
+        }
+
         push_message("Took the " + item_name(kind) + ".");
     }
 
@@ -815,12 +861,18 @@ void Game::apply_step_action(const ActionEvent& event) {
         break;
     }
     case map::entities::ItemKind::Key:
-        event.player.equip(event.item);
+        if (!event.player.equip(event.item)) {
+            push_message("Your inventory is full.");
+            break;
+        }
         static_cast<void>(_map.remove(event.item.id()));
         push_message("Key acquired.");
         break;
     case map::entities::ItemKind::HealthPotion:
-        event.player.equip(event.item);
+        if (!event.player.equip(event.item)) {
+            push_message("Your inventory is full.");
+            break;
+        }
         static_cast<void>(_map.remove(event.item.id()));
         push_message("Health potion acquired.");
         break;
@@ -831,7 +883,12 @@ void Game::apply_step_action(const ActionEvent& event) {
     case map::entities::ItemKind::Boots: {
         const map::entities::ItemKind kind  = event.item.kind();
         const bool                    owned = event.player.has_item(kind);
-        event.player.equip(event.item);
+
+        if (!event.player.equip(event.item)) {
+            push_message("Your inventory is full.");
+            break;
+        }
+
         static_cast<void>(_map.remove(event.item.id()));
         push_message(item_name(kind) + (owned ? " upgraded." : " equipped."));
         break;

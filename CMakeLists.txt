@@ -86,11 +86,16 @@ if(EMSCRIPTEN)
 
     target_link_options(dungeon PRIVATE
         "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html"
-        "-sEXPORTED_FUNCTIONS=['_main','_dungeon_push_key']"
+        "-sEXPORTED_FUNCTIONS=_main,_dungeon_push_key"
         "-sALLOW_MEMORY_GROWTH=1"
         "-sEXIT_RUNTIME=0"
         "-sENVIRONMENT=web"
         "-sFORCE_FILESYSTEM=0")
+
+    # The shell template is read at link time but not tracked as an input, so
+    # make edits to it relink the page instead of silently leaving it stale.
+    set_property(TARGET dungeon APPEND PROPERTY LINK_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/web/shell.html")
 else()
     # CLI11 provides the command line parser. Prefer a system package when one
     # is available; otherwise CMake fetches a pinned release.

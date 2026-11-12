@@ -598,6 +598,40 @@ DUNGEON_TEST(map, make_spec_spawns_enemies_inside_rooms)
     CHECK(total_enemies > 0);
 }
 
+DUNGEON_TEST(map, enemy_density_grows_with_depth)
+{
+    Map         map;
+    std::size_t shallow_enemies = 0;
+    std::size_t deep_enemies    = 0;
+
+    for (int run = 0; run < 60; ++run) {
+        shallow_enemies += map.make_spec(80, 40, 1).enemies.size();
+        deep_enemies += map.make_spec(80, 40, 10).enemies.size();
+    }
+
+    CHECK(shallow_enemies > 0U);
+    CHECK(deep_enemies > shallow_enemies * 2);
+}
+
+DUNGEON_TEST(map, the_first_dungeon_has_no_enemies_in_the_entrance_room)
+{
+    Map map;
+
+    for (int run = 0; run < 50; ++run) {
+        const MapSpec spec = map.make_spec(80, 40, 1);
+
+        for (const RoomSpec& room : spec.rooms) {
+            if (!inside_room(room, spec.entrance.x, spec.entrance.y)) {
+                continue;
+            }
+
+            for (const dungeon::map::EnemySpec& enemy : spec.enemies) {
+                CHECK(!inside_room(room, enemy.x, enemy.y));
+            }
+        }
+    }
+}
+
 DUNGEON_TEST(map, generate_places_enemies_from_the_spec)
 {
     MapSpec spec;
@@ -642,6 +676,31 @@ DUNGEON_TEST(map, enemy_archetypes_trade_speed_for_durability)
     CHECK(fast.glyph != normal.glyph);
     CHECK(normal.glyph != brute.glyph);
     CHECK(fast.glyph != brute.glyph);
+}
+
+DUNGEON_TEST(map, enemy_stats_scale_with_depth)
+{
+    dungeon::map::entities::Enemy shallow(EnemyKind::Normal, 0, 0);
+    dungeon::map::entities::Enemy deep(EnemyKind::Normal, 0, 0);
+
+    deep.scale_for_depth(4);
+
+    CHECK(deep.stats().hp > shallow.stats().hp);
+    CHECK(deep.max_hp() > shallow.max_hp());
+    CHECK(deep.stats().attack > shallow.stats().attack);
+    CHECK(deep.stats().defence > shallow.stats().defence);
+    CHECK(deep.gold_max() > shallow.gold_max());
+}
+
+DUNGEON_TEST(map, stamina_above_the_base_raises_the_health_cap)
+{
+    dungeon::map::entities::Stats stats;
+    const int                    base = dungeon::map::entities::max_hp(stats);
+
+    stats.stamina += 2;
+
+    CHECK_EQ(dungeon::map::entities::max_hp(stats),
+             base + 2 * dungeon::map::entities::STAMINA_HP_BONUS);
 }
 
 DUNGEON_TEST(map, generate_places_items_from_the_spec)

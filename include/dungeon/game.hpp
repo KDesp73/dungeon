@@ -23,6 +23,11 @@ inline constexpr std::size_t kLevelUpInterval = 5;
 /// Manhattan distance within which the shop menu opens.
 inline constexpr std::size_t kShopkeeperReach = 1;
 
+/// Percentage of an upgrade's base price added for every store visited after
+/// the first. The first store sells at the base price, and each later store
+/// raises every price slightly so that upgrades do not become trivial.
+inline constexpr int kStorePriceGrowthPercent = 15;
+
 /// A cardinal direction the player can move in.
 enum class Direction : unsigned char {
     Up,
@@ -142,8 +147,9 @@ class Game {
 
     /// Descends to the next dungeon, carrying the player's stats and inventory.
     ///
-    /// Enemies grow tougher with depth: every dungeon below the first adds
-    /// health, attack, defence, and bounty to each enemy. The player's level
+    /// Enemy density and strength grow with depth: the first dungeon is sparsely
+    /// populated, and every dungeon below it adds more enemies and gives each
+    /// one extra health, attack, defence, and bounty. The player's level
     /// increases every `kLevelUpInterval` dungeons, raising attack, defence,
     /// and stamina and restoring health. Every `kStoreInterval` dungeons the
     /// next dungeon is a store level: a room with a shopkeeper and an already
@@ -166,6 +172,9 @@ class Game {
     void open_store() noexcept { _store_open = true; }
 
     /// Upgrades offered by the current store level.
+    ///
+    /// The catalog is rebuilt for every store visit. Prices start at their base
+    /// values and rise by `kStorePriceGrowthPercent` on each later visit.
     [[nodiscard]] std::span<const StoreItem> store_items() const noexcept;
 
     /// True when the store item at @p index was already bought this visit.
@@ -286,9 +295,11 @@ class Game {
     ActionHook               _action_hook;
     std::vector<std::string> _messages;
     map::chance::Chance      _chance;
+    std::vector<StoreItem>   _store_items;
     std::vector<bool>        _store_sold;
     std::size_t              _chest_selection = 0;
     std::size_t              _depth           = 1;
+    std::size_t              _store_visits    = 0;
     bool                     _store_level     = false;
     bool                     _store_open      = false;
     bool                     _game_over       = false;
