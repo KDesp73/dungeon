@@ -160,6 +160,7 @@ void Game::generate(std::size_t width, std::size_t height) {
     _store_items.clear();
     _store_sold.clear();
     _store_visits = 0;
+    _run_stats    = {};
     _game_over    = false;
     push_message("You enter the dungeon.");
 }
@@ -174,6 +175,7 @@ void Game::generate(const map::MapSpec& spec) {
     _store_items.clear();
     _store_sold.clear();
     _store_visits = 0;
+    _run_stats    = {};
     _game_over    = false;
     push_message("You enter the dungeon.");
 }
@@ -344,6 +346,7 @@ bool Game::use_health_potion() {
 
     player->stats().hp += healed;
     player->drop(map::entities::ItemKind::HealthPotion);
+    ++_run_stats.potions_used;
     push_message("You drink a health potion and recover " + std::to_string(healed) +
                  " health.");
     return true;
@@ -400,6 +403,7 @@ void Game::attack_enemy(map::entities::Enemy& enemy) {
                                                  static_cast<std::size_t>(enemy.gold_max()));
 
     static_cast<void>(_map.remove(enemy.id()));
+    ++_run_stats.enemies_killed;
 
     for (std::size_t i = 0; i < coin_count; ++i) {
         static_cast<void>(_map.add(std::make_shared<map::entities::Coin>(drop_x, drop_y)));
@@ -610,6 +614,7 @@ void Game::descend() {
     _store_level     = store_level;
     _store_open      = false;
     _chest_selection = 0;
+    ++_run_stats.dungeons_completed;
 
     scale_enemies_for_depth();
 
@@ -813,6 +818,7 @@ bool Game::take_selected_chest_item() {
         item->kind() == map::entities::ItemKind::Diamond) {
         const int gold = item->gold();
         static_cast<void>(item->equip(player->stats()));
+        _run_stats.gold_collected += gold;
         push_message("+" + std::to_string(gold) + " gold");
     } else {
         const map::entities::ItemKind kind = item->kind();
@@ -857,6 +863,7 @@ void Game::apply_step_action(const ActionEvent& event) {
         const int gold = event.item.gold();
         static_cast<void>(event.item.equip(event.player.stats()));
         static_cast<void>(_map.remove(event.item.id()));
+        _run_stats.gold_collected += gold;
         push_message("+" + std::to_string(gold) + " gold");
         break;
     }

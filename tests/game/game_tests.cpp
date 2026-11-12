@@ -108,6 +108,7 @@ DUNGEON_TEST(game, stepping_on_a_coin_collects_it_and_adds_gold) {
 
     const auto after = game.player()->stats();
     CHECK_EQ(after.gold, before.gold + 1);
+    CHECK_EQ(game.run_stats().gold_collected, 1);
     CHECK_EQ(after.level, before.level);
     CHECK_EQ(after.hp, before.hp);
     CHECK_EQ(after.attack, before.attack);
@@ -128,6 +129,7 @@ DUNGEON_TEST(game, stepping_on_a_double_coin_adds_two_gold) {
 
     const auto after = game.player()->stats();
     CHECK_EQ(after.gold, before.gold + 2);
+    CHECK_EQ(game.run_stats().gold_collected, 2);
     CHECK_EQ(after.level, before.level);
     CHECK_EQ(after.hp, before.hp);
     CHECK_EQ(after.attack, before.attack);
@@ -246,6 +248,7 @@ DUNGEON_TEST(game, using_a_health_potion_heals_a_random_amount_and_consumes_it) 
     CHECK(hp >= 50 + dungeon::map::entities::HEALTH_POTION_HEAL_MIN);
     CHECK(hp <= 50 + dungeon::map::entities::HEALTH_POTION_HEAL_MAX);
     CHECK(!game.player()->has_item(ItemKind::HealthPotion));
+    CHECK_EQ(game.run_stats().potions_used, 1U);
     REQUIRE(!game.messages().empty());
     CHECK(game.messages().back().find("recover") != std::string::npos);
 }
@@ -649,6 +652,7 @@ DUNGEON_TEST(game, moving_into_an_enemy_attacks_it_and_drops_variable_coins) {
     CHECK(game.move(Direction::Right));
 
     CHECK(game.nearest_enemy() == nullptr);
+    CHECK_EQ(game.run_stats().enemies_killed, 1U);
     CHECK_EQ(game.player()->x, spec.entrance.x);
     CHECK_EQ(game.player()->y, spec.entrance.y);
     REQUIRE(!game.messages().empty());
@@ -669,6 +673,8 @@ DUNGEON_TEST(game, moving_into_an_enemy_attacks_it_and_drops_variable_coins) {
     CHECK_EQ(game.player()->y, 3U);
     CHECK(game.player()->stats().gold >= gold_before + 1);
     CHECK(game.player()->stats().gold <= gold_before + 2);
+    CHECK(game.run_stats().gold_collected >= 1);
+    CHECK(game.run_stats().gold_collected <= 2);
 }
 
 DUNGEON_TEST(game, a_brute_drops_more_coins_than_a_rat) {
@@ -722,6 +728,25 @@ DUNGEON_TEST(game, the_player_dies_when_an_enemy_reduces_health_to_zero) {
     CHECK_EQ(game.player()->stats().hp, 100);
 }
 
+DUNGEON_TEST(game, restarting_clears_the_run_stats) {
+    MapSpec spec = make_test_spec();
+    spec.items   = {{ItemKind::Coin, 4, 3}};
+
+    Game game(spec);
+    REQUIRE(game.player() != nullptr);
+    REQUIRE(game.move(Direction::Right));
+
+    CHECK_EQ(game.run_stats().gold_collected, 1);
+
+    game.restart();
+
+    CHECK_EQ(game.depth(), 1U);
+    CHECK_EQ(game.run_stats().gold_collected, 0);
+    CHECK_EQ(game.run_stats().enemies_killed, 0U);
+    CHECK_EQ(game.run_stats().dungeons_completed, 0U);
+    CHECK_EQ(game.run_stats().potions_used, 0U);
+}
+
 DUNGEON_TEST(game, descending_every_five_dungeons_levels_up_and_builds_a_store_map) {
     Game game(80, 30);
 
@@ -737,6 +762,7 @@ DUNGEON_TEST(game, descending_every_five_dungeons_levels_up_and_builds_a_store_m
     }
 
     CHECK_EQ(game.depth(), 5U);
+    CHECK_EQ(game.run_stats().dungeons_completed, 4U);
     CHECK(game.store_level());
     CHECK(!game.store_open());
     CHECK_EQ(game.player()->stats().level, start.level + 1);

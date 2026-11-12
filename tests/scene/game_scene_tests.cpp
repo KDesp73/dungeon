@@ -207,6 +207,45 @@ DUNGEON_TEST(scene, game_scene_restarts_after_the_player_dies) {
     CHECK(scene->game().player()->alive());
 }
 
+DUNGEON_TEST(scene, game_over_screen_shows_run_stats) {
+    SceneManager manager;
+    SceneContext context{manager};
+
+    MapSpec spec;
+    spec.width    = 40;
+    spec.height   = 24;
+    spec.rooms    = {{1, 1, 38, 22}};
+    spec.entrance = {3, 3};
+    spec.exit     = {30, 12};
+    spec.enemies  = {{EnemyKind::Brute, 4, 3}};
+
+    GameSceneConfig config;
+    config.layout = std::move(spec);
+
+    manager.push(std::make_unique<GameScene>(std::move(config)));
+
+    auto* scene = dynamic_cast<GameScene*>(manager.top());
+    REQUIRE(scene != nullptr);
+    REQUIRE(scene->game().player() != nullptr);
+    scene->game().player()->stats().hp = 1;
+
+    manager.update(std::chrono::milliseconds(2000), context);
+    REQUIRE(scene->game().game_over());
+
+    dungeon::display::FrameBuffer buffer(100, 30);
+    manager.draw(buffer, context);
+
+    const std::string frame = buffer.render();
+    CHECK(frame.find("Dungeons completed:") != std::string::npos);
+    CHECK(frame.find("Depth reached:") != std::string::npos);
+    CHECK(frame.find("Enemies killed:") != std::string::npos);
+    CHECK(frame.find("Gold collected:") != std::string::npos);
+    CHECK(frame.find("Gold remaining:") != std::string::npos);
+    CHECK(frame.find("Level reached:") != std::string::npos);
+    CHECK(frame.find("Potions used:") != std::string::npos);
+    CHECK(frame.find("Press R to restart") != std::string::npos);
+}
+
 DUNGEON_TEST(scene, game_scene_pause_menu_reports_when_saving_is_unavailable) {
     SceneManager manager;
     SceneContext context{manager};

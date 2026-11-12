@@ -92,6 +92,18 @@ struct StoreItem {
     int                     price = 0;
 };
 
+/// Counters describing everything the player accomplished during a run.
+///
+/// Gold collected is a lifetime total for the run, so spending it at a store
+/// does not reduce it. Dungeons completed counts successful descents; the
+/// dungeon the player dies in is not included.
+struct RunStats {
+    std::size_t dungeons_completed = 0;
+    std::size_t enemies_killed     = 0;
+    std::size_t potions_used       = 0;
+    int         gold_collected     = 0;
+};
+
 /// Owns the map and the rules that move the player through it.
 class Game {
   public:
@@ -132,6 +144,9 @@ class Game {
 
     /// True once the player's health has reached zero.
     [[nodiscard]] bool game_over() const noexcept { return _game_over; }
+
+    /// Totals accumulated during the current run.
+    [[nodiscard]] const RunStats& run_stats() const noexcept { return _run_stats; }
 
     /// The living enemy closest to the player, or `nullptr` when none remain.
     [[nodiscard]] map::entities::Enemy*       nearest_enemy() noexcept;
@@ -295,6 +310,7 @@ class Game {
     ActionHook               _action_hook;
     std::vector<std::string> _messages;
     map::chance::Chance      _chance;
+    RunStats                 _run_stats;
     std::vector<StoreItem>   _store_items;
     std::vector<bool>        _store_sold;
     std::size_t              _chest_selection = 0;

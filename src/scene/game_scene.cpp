@@ -5,10 +5,12 @@
 #include "dungeon/scene/scene_manager.hpp"
 #include "dungeon/scene/store_scene.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace dungeon::scene {
 
@@ -95,6 +97,57 @@ void GameScene::draw(display::FrameBuffer& buffer, SceneContext& /*context*/) {
     display::tui::draw_ui(buffer, _game.map(), layout, hud);
 
     if (_game.game_over()) {
+        const game::RunStats& run    = _game.run_stats();
+        const auto*           player = _game.player();
+        const int             gold   = player != nullptr ? player->stats().gold : 0;
+        const std::size_t     level  = player != nullptr ? player->stats().level : 0;
+
+        const std::vector<std::string> lines{
+            "Dungeons completed: " + std::to_string(run.dungeons_completed),
+            "Depth reached: " + std::to_string(_game.depth()),
+            "Enemies killed: " + std::to_string(run.enemies_killed),
+            "Gold collected: " + std::to_string(run.gold_collected),
+            "Gold remaining: " + std::to_string(gold),
+            "Level reached: " + std::to_string(level),
+            "Potions used: " + std::to_string(run.potions_used),
+        };
+
+        std::size_t content_width = display::tui::text_width("YOU DIED");
+        for (const std::string& line : lines) {
+            content_width = std::max(content_width, display::tui::text_width(line));
+        }
+
+        const std::size_t panel_width  = std::min(layout.game.width, content_width + 4);
+        const std::size_t panel_height = lines.size() + 6;
+
+        if (layout.game.width > 4 && layout.game.height >= panel_height) {
+            const display::tui::Rect panel{
+                layout.game.x + (layout.game.width - panel_width) / 2,
+                layout.game.y + (layout.game.height - panel_height) / 2,
+                panel_width,
+                panel_height,
+            };
+
+            display::tui::fill(buffer, panel);
+            display::tui::box(buffer, panel);
+
+            const display::CellStyle title{
+                display::Color::BrightRed, display::Color::Default, display::TextStyle::Bold};
+
+            std::size_t row = panel.y + 1;
+            display::tui::label_centered(buffer, "YOU DIED", panel, row, title);
+
+            row += 2;
+            for (const std::string& line : lines) {
+                display::tui::label_centered(buffer, line, panel, row);
+                ++row;
+            }
+
+            row += 1;
+            display::tui::label_centered(buffer, "Press R to restart", panel, row);
+            return;
+        }
+
         const std::size_t row    = layout.game.y + layout.game.height / 2;
         const display::CellStyle title{
             display::Color::BrightRed, display::Color::Default, display::TextStyle::Bold};
