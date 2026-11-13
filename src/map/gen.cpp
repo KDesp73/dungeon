@@ -560,9 +560,12 @@ MapSpec Map::make_spec(std::size_t width, std::size_t height, std::size_t depth)
                                                        chance::NORMAL_ENEMY_WEIGHT,
                                                        chance::BRUTE_ENEMY_WEIGHT};
 
-            const std::size_t enemy_count =
-                _chance.range(chance::ENEMY_MIN_PER_ROOM,
-                              chance::enemy_max_per_room(spawn_depth));
+            const std::size_t maximum     = chance::enemy_max_per_room(spawn_depth);
+            std::size_t       enemy_count = _chance.range(chance::ENEMY_MIN_PER_ROOM, maximum);
+
+            if (enemy_count == maximum && _chance.roll(chance::enemy_extra_chance(spawn_depth))) {
+                ++enemy_count;
+            }
 
             for (std::size_t i = 0; i < enemy_count && !free_cells.empty(); ++i) {
                 const std::size_t index = _chance.range(0, free_cells.size() - 1);

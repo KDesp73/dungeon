@@ -163,6 +163,34 @@ bool path_reachable(const Map& map, Point start, Point goal)
     return false;
 }
 
+std::size_t dungeon_gold_value(const Map& map)
+{
+    std::size_t gold = 0;
+
+    for (const dungeon::map::EntityPtr& entity : map.entity_ptrs()) {
+        const auto* enemy = dynamic_cast<const dungeon::map::entities::Enemy*>(entity.get());
+        if (enemy != nullptr) {
+            gold += static_cast<std::size_t>((enemy->gold_min() + enemy->gold_max()) / 2);
+            continue;
+        }
+
+        const auto* chest = dynamic_cast<const dungeon::map::entities::Chest*>(entity.get());
+        if (chest != nullptr) {
+            for (const dungeon::map::entities::Item& item : chest->contents()) {
+                gold += static_cast<std::size_t>(item.gold());
+            }
+            continue;
+        }
+
+        const auto* item = dynamic_cast<const dungeon::map::entities::Item*>(entity.get());
+        if (item != nullptr) {
+            gold += static_cast<std::size_t>(item->gold());
+        }
+    }
+
+    return gold;
+}
+
 }  // namespace
 
 DUNGEON_TEST(map, a_new_map_is_empty)
@@ -678,12 +706,48 @@ DUNGEON_TEST(map, enemy_archetypes_trade_speed_for_durability)
     CHECK(fast.glyph != brute.glyph);
 }
 
+DUNGEON_TEST(map, extra_enemy_chance_ramps_after_the_second_store)
+{
+    using dungeon::map::chance::ENEMY_EXTRA_MAX;
+    using dungeon::map::chance::enemy_extra_chance;
+
+    CHECK_EQ(enemy_extra_chance(10), 0.0);
+    CHECK(enemy_extra_chance(11) > 0.0);
+    CHECK(enemy_extra_chance(19) > enemy_extra_chance(11));
+    CHECK(enemy_extra_chance(100) <= ENEMY_EXTRA_MAX);
+}
+
+DUNGEON_TEST(map, generated_gold_grows_at_a_controlled_rate)
+{
+    constexpr int runs = 100;
+
+    Map         map;
+    std::size_t shallow_total = 0;
+    std::size_t deep_total    = 0;
+
+    for (int run = 0; run < runs; ++run) {
+        map.generate(map.make_spec(80, 40, 1));
+        shallow_total += dungeon_gold_value(map);
+
+        map.generate(map.make_spec(80, 40, 19));
+        deep_total += dungeon_gold_value(map);
+    }
+
+    const double shallow = static_cast<double>(shallow_total) / runs;
+    const double deep    = static_cast<double>(deep_total) / runs;
+
+    CHECK(shallow > 5.0);
+    CHECK(shallow < 20.0);
+    CHECK(deep > shallow * 2.0);
+    CHECK(deep < 60.0);
+}
+
 DUNGEON_TEST(map, enemy_stats_scale_with_depth)
 {
     dungeon::map::entities::Enemy shallow(EnemyKind::Normal, 0, 0);
     dungeon::map::entities::Enemy deep(EnemyKind::Normal, 0, 0);
 
-    deep.scale_for_depth(4);
+    deep.scale_for_depth(20);
 
     CHECK(deep.stats().hp > shallow.stats().hp);
     CHECK(deep.max_hp() > shallow.max_hp());

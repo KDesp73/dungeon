@@ -916,7 +916,12 @@ DUNGEON_TEST(game, store_prices_rise_with_each_store_visit) {
     REQUIRE(game.store_items().size() == first_prices.size());
 
     for (std::size_t i = 0; i < first_prices.size(); ++i) {
-        CHECK(game.store_items()[i].price > first_prices[i]);
+        const int price  = game.store_items()[i].price;
+        const int growth = first_prices[i] * dungeon::game::kStorePriceGrowthPercent / 100;
+
+        CHECK(price > first_prices[i]);
+        CHECK(price >= first_prices[i] + growth - 1);
+        CHECK(price <= first_prices[i] + growth + 1);
     }
 }
 

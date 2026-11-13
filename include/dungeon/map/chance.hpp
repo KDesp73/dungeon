@@ -8,13 +8,13 @@
 namespace dungeon::map::chance {
 
 /// Probability that a room contains a single coin.
-inline constexpr double COIN = 0.6;
+inline constexpr double COIN = 0.40;
 /// Probability that a room contains a double-value coin.
-inline constexpr double COIN_DOUBLE = 0.3;
+inline constexpr double COIN_DOUBLE = 0.15;
 /// Probability that a room contains a chest.
-inline constexpr double CHEST = 0.2;
+inline constexpr double CHEST = 0.15;
 /// Probability that a room contains a diamond.
-inline constexpr double DIAMOND = 0.05;
+inline constexpr double DIAMOND = 0.02;
 /// Probability that a room contains a health potion.
 inline constexpr double HEALTH_POTION = 0.08;
 /// Minimum number of items rolled into a generated chest.
@@ -22,11 +22,11 @@ inline constexpr std::size_t CHEST_LOOT_MIN = 1;
 /// Maximum number of items rolled into a generated chest.
 inline constexpr std::size_t CHEST_LOOT_MAX = 3;
 /// Probability that a chest loot roll is a double-value coin.
-inline constexpr double CHEST_LOOT_DOUBLE_COIN = 0.25;
+inline constexpr double CHEST_LOOT_DOUBLE_COIN = 0.15;
 /// Probability that a chest loot roll is a health potion.
 inline constexpr double CHEST_LOOT_HEALTH_POTION = 0.15;
 /// Probability that a chest loot roll is a diamond.
-inline constexpr double CHEST_LOOT_DIAMOND = 0.05;
+inline constexpr double CHEST_LOOT_DIAMOND = 0.02;
 /// Probability that a chest loot roll is the dungeon key.
 ///
 /// At most one key is placed in the whole dungeon, so this roll is skipped once
@@ -36,7 +36,7 @@ inline constexpr double CHEST_LOOT_KEY = 0.05;
 inline constexpr double ROOM_PRESENT = 0.75;
 
 /// Probability that a room contains at least one enemy in the first dungeon.
-inline constexpr double ENEMY_ROOM_PRESENT_BASE = 0.30;
+inline constexpr double ENEMY_ROOM_PRESENT_BASE = 0.25;
 /// Added to the enemy-room probability for every dungeon below the first.
 inline constexpr double ENEMY_ROOM_PRESENT_STEP = 0.05;
 /// Upper bound for the enemy-room probability.
@@ -60,6 +60,15 @@ inline constexpr std::size_t ENEMY_MAX_PER_ROOM_LATE = 2;
 /// This happens after the first store and level-up, so the larger groups do not
 /// arrive before the player has had a chance to improve their stats.
 inline constexpr std::size_t ENEMY_MAX_PER_ROOM_DEPTH = 6;
+
+/// Depth after which a room that already rolled the maximum group can grow by
+/// one more enemy.
+inline constexpr std::size_t ENEMY_EXTRA_DEPTH = 10;
+/// Added to the chance of an extra enemy for every dungeon below
+/// `ENEMY_EXTRA_DEPTH`.
+inline constexpr double ENEMY_EXTRA_STEP = 0.05;
+/// Upper bound for the extra-enemy chance.
+inline constexpr double ENEMY_EXTRA_MAX = 0.5;
 
 /// Returns @p base plus @p step for every depth below the first.
 ///
@@ -91,6 +100,20 @@ inline constexpr std::size_t ENEMY_MAX_PER_ROOM_DEPTH = 6;
 /// Maximum number of enemies a room can roll at @p depth.
 [[nodiscard]] constexpr std::size_t enemy_max_per_room(std::size_t depth) noexcept {
     return depth >= ENEMY_MAX_PER_ROOM_DEPTH ? ENEMY_MAX_PER_ROOM_LATE : ENEMY_MAX_PER_ROOM_EARLY;
+}
+
+/// Chance that a room which already rolled a full group gets one more enemy.
+///
+/// The chance starts at zero at `ENEMY_EXTRA_DEPTH` and grows by
+/// `ENEMY_EXTRA_STEP` for every depth below it. This turns the final enemy-count
+/// step into a gradual ramp instead of a sudden jump after a store level.
+[[nodiscard]] constexpr double enemy_extra_chance(std::size_t depth) noexcept {
+    if (depth <= ENEMY_EXTRA_DEPTH) {
+        return 0.0;
+    }
+
+    const double scaled = ENEMY_EXTRA_STEP * static_cast<double>(depth - ENEMY_EXTRA_DEPTH);
+    return scaled > ENEMY_EXTRA_MAX ? ENEMY_EXTRA_MAX : scaled;
 }
 
 /// Relative weight for placing the key in the player's starting room.

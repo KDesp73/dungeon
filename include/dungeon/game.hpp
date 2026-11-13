@@ -25,8 +25,10 @@ inline constexpr std::size_t kShopkeeperReach = 1;
 
 /// Percentage of an upgrade's base price added for every store visited after
 /// the first. The first store sells at the base price, and each later store
-/// raises every price slightly so that upgrades do not become trivial.
-inline constexpr int kStorePriceGrowthPercent = 15;
+/// raises every price so that income never comfortably covers the whole
+/// catalog. At the measured income curve this keeps every visit below or near
+/// the cost of buying all five upgrades, so the player must choose priorities.
+inline constexpr int kStorePriceGrowthPercent = 30;
 
 /// A cardinal direction the player can move in.
 enum class Direction : unsigned char {

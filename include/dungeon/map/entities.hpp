@@ -157,13 +157,15 @@ inline constexpr EnemyProfile kEnemyProfiles[] = {
 
 /// Enemy stat gains per dungeon below the first.
 ///
-/// Attack grows slowly so that the player's defence upgrades and level-ups stay
-/// meaningful. A faster attack curve makes late dungeons lethal regardless of
-/// how much equipment the player has bought.
-inline constexpr int ENEMY_HP_PER_DEPTH      = 3;
+/// Health climbs faster than attack so fights get longer and more dangerous as
+/// the player descends, while the player's defence upgrades still keep damage
+/// manageable. Bounty grows slowly on purpose: combined with the rising enemy
+/// count it already produces a steady gold curve, and a faster curve would let
+/// the player buy every store upgrade without making choices.
+inline constexpr int ENEMY_HP_PER_DEPTH      = 4;
 inline constexpr int ENEMY_ATTACK_PER_DEPTH  = 1;
 inline constexpr int ENEMY_DEFENCE_PER_DEPTH = 3; // One defence point per three depths.
-inline constexpr int ENEMY_GOLD_PER_DEPTH    = 2; // One extra coin per two depths.
+inline constexpr int ENEMY_GOLD_PER_DEPTH    = 12; // One extra coin per twelve depths.
 
 
 /// Returns the profile for @p kind.

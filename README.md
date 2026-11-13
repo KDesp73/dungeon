@@ -296,9 +296,3 @@ New subsystems get a directory under `include/dungeon/` and `src/`; see
   before committing.
 - Public headers do not include what they do not use, and every header
   compiles on its own.
-
-## Development plan
-
-The staged plan lives in [AGENT.md](AGENT.md); the layering rules and the
-rationale behind the structure live in
-[docs/architecture.md](docs/architecture.md).
