@@ -40,6 +40,9 @@ struct GameSceneConfig {
                                  "Chest:     [ ] cycle, 1-9 select\n"
                                  "Take item: Enter\n"
                                  "Store:     approach the shopkeeper\n"
+#ifdef DUNGEON_DEV
+                                 "Dev:       @ jump to next store/boss\n"
+#endif
                                  "Shop:      Enter buy, Esc leave";
 
     /// Called when the player chooses "Save game" in the pause menu.
@@ -70,6 +73,11 @@ class GameScene final : public Scene {
     void        open_pause_menu(SceneContext& context);
     void        update_store_proximity(SceneContext& context);
     std::string save_game();
+
+#ifdef DUNGEON_DEV
+    /// Dev-only shortcut: descend to the next store or boss level.
+    void jump_to_special_level(SceneContext& context);
+#endif
 
     GameSceneConfig _config;
     game::Game      _game;

@@ -48,6 +48,10 @@ open; step into the `[` to continue to the next dungeon. Every tenth dungeon is
 a boss arena instead: break its corner anchors, then attack the boss. Defeat the
 final boss at depth 50 to win.
 
+In dev builds (everything except `Release` and `MinSizeRel`), pressing `@`
+skips directly to the next store or boss level. The shortcut is compiled out of
+release builds and never jumps past the final boss.
+
 ## Command line
 
 ```sh

@@ -377,3 +377,60 @@ DUNGEON_TEST(scene, store_scene_buys_an_upgrade_and_leaves) {
     CHECK(manager.empty());
     CHECK(!game.store_open());
 }
+
+DUNGEON_TEST(scene, at_sign_jumps_to_the_next_store_and_boss_in_dev_builds) {
+    SceneManager manager;
+    SceneContext context{manager};
+
+    GameSceneConfig config;
+    config.layout = make_large_spec();
+
+    manager.push(std::make_unique<GameScene>(std::move(config)));
+
+    auto* scene = dynamic_cast<GameScene*>(manager.top());
+    REQUIRE(scene != nullptr);
+    CHECK_EQ(scene->game().depth(), 1U);
+
+#ifdef DUNGEON_DEV
+    CHECK(manager.handle_key(KeyEvent::from_character('@'), context));
+    CHECK_EQ(scene->game().depth(), 5U);
+    CHECK(scene->game().store_level());
+    CHECK(!scene->game().boss_level());
+
+    CHECK(manager.handle_key(KeyEvent::from_character('@'), context));
+    CHECK_EQ(scene->game().depth(), 10U);
+    CHECK(scene->game().boss_level());
+    CHECK(scene->game().boss() != nullptr);
+#else
+    CHECK(!manager.handle_key(KeyEvent::from_character('@'), context));
+    CHECK_EQ(scene->game().depth(), 1U);
+#endif
+}
+
+DUNGEON_TEST(scene, at_sign_never_jumps_past_the_final_boss) {
+    SceneManager manager;
+    SceneContext context{manager};
+
+    GameSceneConfig config;
+    config.layout = make_large_spec();
+
+    manager.push(std::make_unique<GameScene>(std::move(config)));
+
+    auto* scene = dynamic_cast<GameScene*>(manager.top());
+    REQUIRE(scene != nullptr);
+
+    for (int i = 0; i < 49; ++i) {
+        scene->game().descend();
+    }
+    REQUIRE(scene->game().depth() == 50U);
+
+#ifdef DUNGEON_DEV
+    CHECK(manager.handle_key(KeyEvent::from_character('@'), context));
+    CHECK_EQ(scene->game().depth(), 50U);
+    CHECK(scene->game().boss_level());
+    CHECK(!scene->game().victory());
+#else
+    CHECK(!manager.handle_key(KeyEvent::from_character('@'), context));
+    CHECK_EQ(scene->game().depth(), 50U);
+#endif
+}

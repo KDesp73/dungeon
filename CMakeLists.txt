@@ -66,8 +66,12 @@ target_include_directories(dungeon_core
     PUBLIC  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+# Dev-only conveniences (such as the '@' jump key) are compiled out of Release
+# and MinSizeRel builds. PUBLIC so the executable and the test suite see the
+# same setting as the game library.
 target_compile_definitions(dungeon_core PUBLIC
-    DUNGEON_VERSION_STRING="${PROJECT_VERSION}")
+    DUNGEON_VERSION_STRING="${PROJECT_VERSION}"
+    $<$<NOT:$<CONFIG:Release,MinSizeRel>>:DUNGEON_DEV=1>)
 
 dungeon_set_warnings(dungeon_core)
 dungeon_enable_sanitizers(dungeon_core)

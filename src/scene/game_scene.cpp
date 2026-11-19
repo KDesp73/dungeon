@@ -105,6 +105,11 @@ bool GameScene::handle_key(const controls::KeyEvent& key, SceneContext& context)
     }
 
     switch (key.value) {
+#ifdef DUNGEON_DEV
+    case '@':
+        jump_to_special_level(context);
+        return true;
+#endif
     case 'h':
     case 'H':
         static_cast<void>(_game.use_health_potion());
@@ -205,6 +210,29 @@ std::string GameScene::save_game() {
 
     return _config.save_handler(_game) ? "Game saved." : "Could not save the game.";
 }
+
+#ifdef DUNGEON_DEV
+void GameScene::jump_to_special_level(SceneContext& context) {
+    // Special levels are at most kBossInterval depths apart, and the final boss
+    // is the end of the run, so never descend past it.
+    for (std::size_t i = 0; i < game::kBossInterval; ++i) {
+        if (_game.depth() >= game::kFinalBossDepth) {
+            break;
+        }
+
+        _game.descend();
+
+        if (_game.store_level() || _game.boss_level()) {
+            break;
+        }
+    }
+
+    // The player may have been next to a shopkeeper before the jump. Clear the
+    // latch so a new store can open normally after the teleport.
+    _store_near = false;
+    update_store_proximity(context);
+}
+#endif
 
 void GameScene::update_store_proximity(SceneContext& context) {
     const bool near = _game.nearby_shopkeeper() != nullptr;
