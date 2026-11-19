@@ -30,6 +30,7 @@ class Entity {
     [[nodiscard]] char  tile() const { return _tile; }
     [[nodiscard]] Color color() const { return _color; }
     [[nodiscard]] Style style() const { return _style; }
+    void                set_tile(char tile) noexcept { _tile = tile; }
     void                hide() { _visible = false; }
     void                show() { _visible = true; }
     void                place(std::size_t xx, std::size_t yy);
@@ -112,7 +113,7 @@ class Alive {
     [[nodiscard]] bool   alive() const { return _stats.hp > 0; }
     std::size_t          level_up() { return ++_stats.level; }
 
-  private:
+  protected:
     Stats _stats;
 };
 
@@ -124,6 +125,7 @@ enum class EnemyKind : unsigned char {
     Fast,
     Normal,
     Brute,
+    Boss,
 };
 
 /// Fixed stats and behaviour shared by every enemy of one kind.
@@ -149,10 +151,12 @@ struct EnemyProfile {
 /// the player buys upgrades.
 inline constexpr EnemyProfile kEnemyProfiles[] = {
     // Ordered fastest to slowest. Bounty grows with the danger of the enemy.
-    //Name  Glyph Color              HP  AT  DE  g  G  MI    ATI  AR  SL
-    {"Rat", 'r', Color::BrightGreen, 8,  5,  2,  1, 2, 0.22, 0.9, 7, "Fast"},
-    {"Goblin", 'g', Color::Yellow  , 24, 10, 6,  2, 4, 0.45, 1.1, 6, "Normal"},
-    {"Ogre", 'O', Color::BrightRed , 60, 25, 4,  4, 8, 0.85, 1.4, 5, "Slow"},
+    //Name   Glyph Color               HP   AT  DE   g   G  MI    ATI  AR   SL
+    {"Rat",   'r', Color::BrightGreen,   8,   5,  2,   1,  2, 0.22, 0.9,  7, "Fast"},
+    {"Goblin",'g', Color::Yellow      ,  24,  10,  6,   2,  4, 0.45, 1.1,  6, "Normal"},
+    {"Ogre",  'O', Color::BrightRed  ,  60,  25,  4,   4,  8, 0.85, 1.4,  5, "Slow"},
+    // Bosses never move or melee; their fireballs are driven by Boss instead.
+    {"Boss",  'B', Color::BrightMagenta, 90,  20,  6,  25, 40, 1.00, 2.0, 99, "Static"},
 };
 
 /// Enemy stat gains per dungeon below the first.
@@ -167,6 +171,63 @@ inline constexpr int ENEMY_ATTACK_PER_DEPTH  = 1;
 inline constexpr int ENEMY_DEFENCE_PER_DEPTH = 3; // One defence point per three depths.
 inline constexpr int ENEMY_GOLD_PER_DEPTH    = 12; // One extra coin per twelve depths.
 
+/// Boss stats at tier one, before the per-tier bonus is applied.
+inline constexpr int BOSS_BASE_HP      = 90;
+inline constexpr int BOSS_BASE_ATTACK  = 20;
+inline constexpr int BOSS_BASE_DEFENCE = 6;
+
+/// Stat gains for every boss tier after the first.
+inline constexpr int BOSS_HP_PER_TIER      = 70;
+inline constexpr int BOSS_ATTACK_PER_TIER  = 6;
+inline constexpr int BOSS_DEFENCE_PER_TIER = 3;
+
+/// Extra stats granted to the final boss on top of its tier.
+inline constexpr int FINAL_BOSS_HP_BONUS     = 150;
+inline constexpr int FINAL_BOSS_ATTACK_BONUS = 8;
+
+/// Delay between fireball volleys. Each tier makes the boss faster, down to the
+/// minimum; the final boss fires slightly faster than an ordinary boss.
+inline constexpr double BOSS_FIREBALL_INTERVAL_BASE = 2.6;
+inline constexpr double BOSS_FIREBALL_INTERVAL_STEP = 0.3;
+inline constexpr double BOSS_FIREBALL_INTERVAL_MIN  = 1.0;
+inline constexpr double FINAL_BOSS_FIREBALL_BONUS   = 0.2;
+
+/// How far a fireball travels before burning out.
+inline constexpr std::size_t FIREBALL_RANGE_BASE      = 12;
+inline constexpr std::size_t FIREBALL_RANGE_PER_TIER  = 2;
+
+/// Seconds between fireball cell steps.
+inline constexpr double FIREBALL_STEP_INTERVAL = 0.18;
+
+/// How often a boss "giggles", and for how long the animation plays.
+inline constexpr double BOSS_GIGGLE_INTERVAL = 6.0;
+inline constexpr double BOSS_GIGGLE_DURATION = 0.35;
+
+/// Number of anchors protecting a boss at @p tier.
+///
+/// The first boss is a straightforward duel. The second introduces two anchors
+/// on opposite corners, and every later boss uses all four. The final boss also
+/// has four, but faster fireballs and much higher stats.
+[[nodiscard]] constexpr std::size_t boss_anchor_count(std::size_t tier) noexcept {
+    if (tier <= 1) {
+        return 0;
+    }
+    return tier == 2 ? 2 : 4;
+}
+
+/// Builds the stats for a boss of @p tier.
+[[nodiscard]] constexpr Stats boss_stats(std::size_t tier, bool final_boss) noexcept {
+    const int steps = tier == 0 ? 1 : static_cast<int>(tier);
+    return Stats{
+        .level   = 1,
+        .hp      = BOSS_BASE_HP + steps * BOSS_HP_PER_TIER + (final_boss ? FINAL_BOSS_HP_BONUS : 0),
+        .attack  = BOSS_BASE_ATTACK + steps * BOSS_ATTACK_PER_TIER +
+                   (final_boss ? FINAL_BOSS_ATTACK_BONUS : 0),
+        .defence = BOSS_BASE_DEFENCE + steps * BOSS_DEFENCE_PER_TIER,
+        .stamina = 0,
+        .gold    = 0,
+    };
+}
 
 /// Returns the profile for @p kind.
 [[nodiscard]] constexpr const EnemyProfile& enemy_profile(EnemyKind kind) noexcept {
@@ -190,9 +251,16 @@ class Enemy : public Entity, public Alive {
     [[nodiscard]] const EnemyProfile&      profile() const noexcept { return enemy_profile(_kind); }
     [[nodiscard]] std::string_view         name() const noexcept { return profile().name; }
     [[nodiscard]] int                      max_hp() const noexcept { return _max_hp; }
+    [[nodiscard]] bool                     is_boss() const noexcept {
+        return _kind == EnemyKind::Boss;
+    }
     [[nodiscard]] std::string_view         speed_label() const noexcept {
         return profile().speed_label;
     }
+
+    /// Replaces the combat stats after construction, used by the boss subclass.
+    void set_stats(Stats stats) noexcept { _stats = stats; }
+    void set_max_hp(int hp) noexcept { _max_hp = hp; }
     [[nodiscard]] int gold_min() const noexcept { return profile().gold_min + _gold_bonus; }
     [[nodiscard]] int gold_max() const noexcept { return profile().gold_max + _gold_bonus; }
 
@@ -258,6 +326,116 @@ class Enemy : public Entity, public Alive {
     double    _attack_elapsed   = 0.0;
     bool      _alerted          = false;
     int       _wander_direction = 0;
+};
+
+/// A static arena boss.
+///
+/// Bosses do not walk and do not melee. Instead they fire volleys of fireballs
+/// in all cardinal directions (eight for the final boss). They take no damage
+/// while any anchor is still standing.
+class Boss final : public Enemy {
+  public:
+    Boss(std::size_t x, std::size_t y, std::size_t tier = 1, bool final_boss = false)
+        : Enemy(EnemyKind::Boss, x, y), _tier(tier == 0 ? 1 : tier), _final(final_boss),
+          _anchors_remaining(boss_anchor_count(tier)) {
+        const Stats stats = boss_stats(_tier, final_boss);
+        set_stats(stats);
+        set_max_hp(stats.hp);
+    }
+
+    [[nodiscard]] std::size_t tier() const noexcept { return _tier; }
+    [[nodiscard]] bool        is_final() const noexcept { return _final; }
+
+    /// True once every anchor has been destroyed.
+    [[nodiscard]] bool vulnerable() const noexcept { return _anchors_remaining == 0; }
+    [[nodiscard]] std::size_t anchors_remaining() const noexcept { return _anchors_remaining; }
+    void set_anchors_remaining(std::size_t count) noexcept { _anchors_remaining = count; }
+
+    /// Seconds between fireball volleys for this boss.
+    [[nodiscard]] double fireball_interval() const noexcept {
+        const int  steps   = static_cast<int>(_tier) - 1;
+        double     interval = BOSS_FIREBALL_INTERVAL_BASE -
+                              static_cast<double>(steps) * BOSS_FIREBALL_INTERVAL_STEP;
+        if (_final) {
+            interval -= FINAL_BOSS_FIREBALL_BONUS;
+        }
+        return interval > BOSS_FIREBALL_INTERVAL_MIN ? interval : BOSS_FIREBALL_INTERVAL_MIN;
+    }
+
+    /// How far this boss's fireballs travel.
+    [[nodiscard]] std::size_t fireball_range() const noexcept {
+        return FIREBALL_RANGE_BASE + (_tier - 1) * FIREBALL_RANGE_PER_TIER;
+    }
+
+    /// Cardinal directions for ordinary bosses, diagonals too for the final one.
+    [[nodiscard]] std::size_t fireball_directions() const noexcept { return _final ? 8U : 4U; }
+
+    /// A short visual flicker used for the boss's "giggle".
+    void set_giggling(bool giggling) noexcept { set_tile(giggling ? 'b' : 'B'); }
+
+    [[nodiscard]] bool        fireball_ready() const noexcept {
+        return _fireball_elapsed >= fireball_interval();
+    }
+    void advance_fireball_timer(double seconds) noexcept { _fireball_elapsed += seconds; }
+    void reset_fireball_timer() noexcept { _fireball_elapsed = 0.0; }
+
+  private:
+    std::size_t _tier;
+    bool        _final;
+    std::size_t _anchors_remaining;
+    double      _fireball_elapsed = 0.0;
+};
+
+/// A destructible pillar protecting a boss.
+///
+/// Anchors are inert: the player breaks one by walking into it, just like
+/// attacking an enemy. They are drawn as `A` and block fireballs.
+class Anchor : public Entity {
+  public:
+    Anchor(std::size_t x, std::size_t y, int hits)
+        : Entity('A', Color::BrightCyan, Style::Bold, x, y), _hits(hits > 1 ? hits : 1) {}
+
+    void take_damage(int damage = 1) noexcept {
+        if (damage <= 0) {
+            return;
+        }
+        _hits = _hits > damage ? _hits - damage : 0;
+    }
+
+    [[nodiscard]] bool alive() const noexcept { return _hits > 0; }
+    [[nodiscard]] int  hits() const noexcept { return _hits; }
+
+  private:
+    int _hits;
+};
+
+/// A fireball travelling in a straight line away from a boss.
+class Fireball : public Entity {
+  public:
+    Fireball(std::size_t x, std::size_t y, int dx, int dy, int damage, std::size_t range)
+        : Entity('*', Color::BrightRed, Style::Bold, x, y), _dx(dx), _dy(dy), _damage(damage),
+          _range(range) {}
+
+    [[nodiscard]] int         dx() const noexcept { return _dx; }
+    [[nodiscard]] int         dy() const noexcept { return _dy; }
+    [[nodiscard]] int         damage() const noexcept { return _damage; }
+    [[nodiscard]] bool        expired() const noexcept { return _range == 0; }
+
+    void advance(double seconds) noexcept { _elapsed += seconds; }
+    [[nodiscard]] bool step_ready() const noexcept { return _elapsed >= FIREBALL_STEP_INTERVAL; }
+    void reset_step_timer() noexcept { _elapsed = 0.0; }
+    void consume_step() noexcept {
+        if (_range > 0) {
+            --_range;
+        }
+    }
+
+  private:
+    int         _dx;
+    int         _dy;
+    int         _damage;
+    std::size_t _range;
+    double      _elapsed = 0.0;
 };
 
 /// The keeper of a store level.

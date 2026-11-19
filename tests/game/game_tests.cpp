@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <string>
+#include <utility>
 #include <vector>
 
 using dungeon::game::ActionEvent;
@@ -15,7 +16,10 @@ using dungeon::game::direction_from_key;
 using dungeon::game::Game;
 using dungeon::map::DoorSide;
 using dungeon::map::MapSpec;
+using dungeon::map::entities::Anchor;
+using dungeon::map::entities::Boss;
 using dungeon::map::entities::EnemyKind;
+using dungeon::map::entities::Fireball;
 using dungeon::map::entities::ItemKind;
 
 namespace {
@@ -63,6 +67,49 @@ std::size_t count_actions(const std::vector<RecordedAction>& actions, ActionTrig
         }
     }
     return count;
+}
+
+std::size_t count_fireballs(const Game& game) {
+    std::size_t count = 0;
+    for (const dungeon::map::EntityPtr& entity : game.map().entity_ptrs()) {
+        if (dynamic_cast<const Fireball*>(entity.get()) != nullptr) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+Anchor* first_anchor(Game& game) {
+    for (const dungeon::map::EntityPtr& entity : game.map().entity_ptrs()) {
+        auto* anchor = dynamic_cast<Anchor*>(entity.get());
+        if (anchor != nullptr && anchor->alive()) {
+            return anchor;
+        }
+    }
+    return nullptr;
+}
+
+void destroy_all_anchors(Game& game) {
+    while (game.anchors_remaining() > 0) {
+        Anchor* anchor = first_anchor(game);
+        REQUIRE(anchor != nullptr);
+        game.player()->place(anchor->x, anchor->y - 1);
+        CHECK(game.move(Direction::Down));
+    }
+}
+
+void strike_boss_until_dead(Game& game) {
+    auto* boss = game.boss();
+    REQUIRE(boss != nullptr);
+
+    // A single huge hit keeps these tests focused on the boss lifecycle rather
+    // than on how many melee strikes its tier needs.
+    game.player()->stats().attack = 1000;
+    game.player()->place(boss->x, boss->y + 1);
+
+    for (int i = 0; i < 10 && game.boss() != nullptr; ++i) {
+        CHECK(game.move(Direction::Up));
+    }
 }
 
 } // namespace
@@ -158,6 +205,7 @@ DUNGEON_TEST(game, stepping_on_the_key_equips_it_into_the_inventory) {
     CHECK_EQ(after.stamina, before.stamina);
     CHECK_EQ(after.gold, before.gold);
     CHECK(game.player()->has_key());
+    CHECK_EQ(game.run_stats().keys_collected, 1U);
     REQUIRE(!game.player()->inventory().empty());
     CHECK_EQ(game.player()->inventory().front().tile(), 'k');
     CHECK_EQ(game.map().entity_ptrs().size(), 1U);
@@ -493,6 +541,7 @@ DUNGEON_TEST(game, taking_a_key_from_a_chest_equips_it) {
     CHECK(!game.player()->has_key());
     CHECK(game.take_selected_chest_item());
     CHECK(game.player()->has_key());
+    CHECK_EQ(game.run_stats().keys_collected, 1U);
     REQUIRE(game.nearby_chest() != nullptr);
     CHECK(game.nearby_chest()->empty());
 }
@@ -745,6 +794,8 @@ DUNGEON_TEST(game, restarting_clears_the_run_stats) {
     CHECK_EQ(game.run_stats().enemies_killed, 0U);
     CHECK_EQ(game.run_stats().dungeons_completed, 0U);
     CHECK_EQ(game.run_stats().potions_used, 0U);
+    CHECK_EQ(game.run_stats().keys_collected, 0U);
+    CHECK_EQ(game.run_stats().bosses_defeated, 0U);
 }
 
 DUNGEON_TEST(game, descending_every_five_dungeons_levels_up_and_builds_a_store_map) {
@@ -908,7 +959,8 @@ DUNGEON_TEST(game, store_prices_rise_with_each_store_visit) {
         first_prices.push_back(item.price);
     }
 
-    for (int i = 0; i < 5; ++i) {
+    // Depth ten is a boss arena, so the next store is at depth fifteen.
+    for (int i = 0; i < 10; ++i) {
         game.descend();
     }
 
@@ -955,7 +1007,8 @@ DUNGEON_TEST(game, buying_owned_equipment_upgrades_it_without_duplicating_it) {
     CHECK_EQ(swords, 1U);
     CHECK_EQ(level, 1U);
 
-    for (int i = 0; i < 5; ++i) {
+    // Skip the boss at depth ten; the next store is at depth fifteen.
+    for (int i = 0; i < 10; ++i) {
         game.descend();
     }
 
@@ -1036,4 +1089,251 @@ DUNGEON_TEST(game, direction_from_key_maps_arrow_events) {
     CHECK(direction_from_key(KeyEvent::from_character('w')) == Direction::Up);
     CHECK(!direction_from_key(KeyEvent::from_kind(KeyKind::Escape)).has_value());
     CHECK(!direction_from_key(KeyEvent{}).has_value());
+}
+
+DUNGEON_TEST(game, every_tenth_dungeon_replaces_the_store_with_a_boss) {
+    Game game(40, 24);
+    REQUIRE(game.player() != nullptr);
+
+    for (int i = 0; i < 8; ++i) {
+        game.descend();
+    }
+
+    CHECK_EQ(game.depth(), 9U);
+    CHECK(!game.boss_level());
+    CHECK(!game.store_level());
+
+    game.descend();
+
+    CHECK_EQ(game.depth(), 10U);
+    CHECK(game.boss_level());
+    CHECK(!game.store_level());
+    CHECK(!game.map().exit_unlocked());
+
+    const Boss* boss = game.boss();
+    REQUIRE(boss != nullptr);
+    CHECK_EQ(boss->tier(), 1U);
+    CHECK_EQ(boss->anchors_remaining(), 0U);
+    CHECK(boss->vulnerable());
+
+    for (int i = 0; i < 5; ++i) {
+        game.descend();
+    }
+
+    CHECK_EQ(game.depth(), 15U);
+    CHECK(!game.boss_level());
+    CHECK(game.store_level());
+}
+
+DUNGEON_TEST(game, boss_difficulty_and_anchor_count_grow_with_each_encounter) {
+    Game game(40, 24);
+    REQUIRE(game.player() != nullptr);
+
+    for (int i = 0; i < 19; ++i) {
+        game.descend();
+    }
+
+    REQUIRE(game.boss_level());
+    const Boss* second = game.boss();
+    REQUIRE(second != nullptr);
+    CHECK_EQ(second->tier(), 2U);
+    CHECK_EQ(second->anchors_remaining(), 2U);
+    CHECK(!second->vulnerable());
+
+    // Copy the values before descending: regeneration destroys the old boss.
+    const int    second_hp     = second->max_hp();
+    const int    second_attack = second->stats().attack;
+    const double second_rate   = second->fireball_interval();
+
+    for (int i = 0; i < 10; ++i) {
+        game.descend();
+    }
+
+    REQUIRE(game.boss_level());
+    const Boss* third = game.boss();
+    REQUIRE(third != nullptr);
+    CHECK_EQ(third->tier(), 3U);
+    CHECK_EQ(third->anchors_remaining(), 4U);
+    CHECK(third->max_hp() > second_hp);
+    CHECK(third->stats().attack > second_attack);
+    CHECK(third->fireball_interval() < second_rate);
+
+    const int third_hp = third->max_hp();
+
+    for (int i = 0; i < 20; ++i) {
+        game.descend();
+    }
+
+    CHECK_EQ(game.depth(), dungeon::game::kFinalBossDepth);
+    REQUIRE(game.boss_level());
+    const Boss* final_boss = game.boss();
+    REQUIRE(final_boss != nullptr);
+    CHECK(final_boss->is_final());
+    CHECK_EQ(final_boss->tier(), 5U);
+    CHECK_EQ(final_boss->anchors_remaining(), 4U);
+    CHECK(final_boss->max_hp() > third_hp);
+    CHECK(final_boss->fireball_directions() == 8U);
+}
+
+DUNGEON_TEST(game, a_boss_takes_no_damage_until_its_anchors_are_destroyed) {
+    dungeon::map::Map map;
+    const MapSpec spec = map.make_boss_spec(40, 24, 2, false);
+    Game game(spec);
+
+    CHECK(game.boss_level());
+    Boss* boss = game.boss();
+    REQUIRE(boss != nullptr);
+    REQUIRE(!boss->vulnerable());
+
+    game.player()->place(boss->x, boss->y + 1);
+    const int hp = boss->stats().hp;
+
+    CHECK(game.move(Direction::Up));
+    CHECK_EQ(boss->stats().hp, hp);
+    REQUIRE(!game.messages().empty());
+    CHECK(game.messages().back().find("shielded") != std::string::npos);
+
+    destroy_all_anchors(game);
+
+    CHECK(boss->vulnerable());
+    CHECK_EQ(game.anchors_remaining(), 0U);
+
+    game.player()->place(boss->x, boss->y + 1);
+    CHECK(game.move(Direction::Up));
+    CHECK(boss->stats().hp < hp);
+}
+
+DUNGEON_TEST(game, a_boss_fires_fireballs_that_travel_away_from_it) {
+    dungeon::map::Map map;
+    const MapSpec spec = map.make_boss_spec(40, 24, 1, false);
+    Game game(spec);
+
+    const Boss* boss = game.boss();
+    REQUIRE(boss != nullptr);
+    CHECK_EQ(count_fireballs(game), 0U);
+
+    game.update(boss->fireball_interval() + 0.01);
+
+    REQUIRE(count_fireballs(game) == 4U);
+
+    std::vector<std::pair<std::size_t, std::size_t>> positions;
+    for (const dungeon::map::EntityPtr& entity : game.map().entity_ptrs()) {
+        if (dynamic_cast<const Fireball*>(entity.get()) != nullptr) {
+            positions.emplace_back(entity->x, entity->y);
+        }
+    }
+
+    game.update(0.19);
+
+    std::size_t moved = 0;
+    std::size_t index = 0;
+    for (const dungeon::map::EntityPtr& entity : game.map().entity_ptrs()) {
+        if (dynamic_cast<const Fireball*>(entity.get()) != nullptr) {
+            if (index < positions.size() &&
+                (entity->x != positions[index].first || entity->y != positions[index].second)) {
+                ++moved;
+            }
+            ++index;
+        }
+    }
+
+    CHECK(moved > 0U);
+}
+
+DUNGEON_TEST(game, a_fireball_hurts_the_player_and_burns_out) {
+    dungeon::map::Map map;
+    const MapSpec spec = map.make_boss_spec(40, 24, 1, false);
+    Game game(spec);
+
+    const Boss* boss = game.boss();
+    REQUIRE(boss != nullptr);
+
+    game.update(boss->fireball_interval() + 0.01);
+    REQUIRE(count_fireballs(game) == 4U);
+
+    const Fireball* fireball = nullptr;
+    for (const dungeon::map::EntityPtr& entity : game.map().entity_ptrs()) {
+        if (const auto* candidate = dynamic_cast<const Fireball*>(entity.get())) {
+            fireball = candidate;
+            break;
+        }
+    }
+    REQUIRE(fireball != nullptr);
+
+    game.player()->place(static_cast<std::size_t>(static_cast<int>(fireball->x) + fireball->dx()),
+                         static_cast<std::size_t>(static_cast<int>(fireball->y) + fireball->dy()));
+    const int hp = game.player()->stats().hp;
+
+    game.update(0.19);
+
+    CHECK(game.player()->stats().hp < hp);
+    CHECK_EQ(count_fireballs(game), 3U);
+}
+
+DUNGEON_TEST(game, a_boss_giggles_on_a_timer_and_restores_its_glyph) {
+    dungeon::map::Map map;
+    const MapSpec spec = map.make_boss_spec(40, 24, 1, false);
+    Game game(spec);
+
+    Boss* boss = game.boss();
+    REQUIRE(boss != nullptr);
+    CHECK_EQ(boss->tile(), 'B');
+
+    game.update(dungeon::map::entities::BOSS_GIGGLE_INTERVAL + 0.01);
+
+    CHECK_EQ(boss->tile(), 'b');
+    REQUIRE(!game.messages().empty());
+    CHECK(game.messages().back().find("giggles") != std::string::npos);
+
+    game.update(dungeon::map::entities::BOSS_GIGGLE_DURATION + 0.01);
+
+    CHECK_EQ(boss->tile(), 'B');
+}
+
+DUNGEON_TEST(game, defeating_a_boss_drops_a_key_that_counts_toward_the_final_one) {
+    dungeon::map::Map map;
+    const MapSpec spec = map.make_boss_spec(40, 24, 1, false);
+    Game game(spec);
+
+    REQUIRE(game.boss() != nullptr);
+    strike_boss_until_dead(game);
+
+    CHECK(game.boss() == nullptr);
+    CHECK_EQ(game.run_stats().bosses_defeated, 1U);
+    CHECK_EQ(game.run_stats().keys_collected, 0U);
+    CHECK(!game.map().exit_unlocked());
+
+    const dungeon::map::Point boss_cell = spec.boss;
+    game.player()->place(boss_cell.x, boss_cell.y - 1);
+    CHECK(game.move(Direction::Down));
+
+    CHECK(game.player()->has_key());
+    CHECK_EQ(game.run_stats().keys_collected, 1U);
+    CHECK(game.map().exit_unlocked());
+}
+
+DUNGEON_TEST(game, defeating_the_final_boss_grants_victory_and_fifty_keys) {
+    dungeon::map::Map map;
+    const MapSpec spec = map.make_boss_spec(40, 24, 5, true);
+    Game game(spec);
+
+    REQUIRE(game.boss() != nullptr);
+    CHECK(!game.victory());
+    destroy_all_anchors(game);
+
+    strike_boss_until_dead(game);
+
+    CHECK(game.boss() == nullptr);
+    CHECK(game.victory());
+    CHECK_EQ(game.run_stats().bosses_defeated, 1U);
+    CHECK_EQ(game.run_stats().keys_collected, 1U);
+    CHECK(!game.move(Direction::Up));
+
+    game.update(1.0);
+    CHECK(game.victory());
+
+    game.restart();
+    CHECK(!game.victory());
+    CHECK_EQ(game.run_stats().keys_collected, 0U);
+    CHECK_EQ(game.run_stats().bosses_defeated, 0U);
 }

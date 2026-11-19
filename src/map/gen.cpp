@@ -647,6 +647,65 @@ MapSpec Map::make_store_spec(std::size_t width, std::size_t height) {
     return spec;
 }
 
+MapSpec Map::make_boss_spec(std::size_t width, std::size_t height, std::size_t tier,
+                            bool final_boss) {
+    MapSpec spec;
+    spec.width  = width;
+    spec.height = height;
+
+    // The arena needs walls, a row either side of the boss for the entrance and
+    // exit, and distinct corner cells for up to four anchors. Anything smaller
+    // produces an empty spec, which `Game::descend()` treats as a fallback to a
+    // normal dungeon.
+    constexpr std::size_t min_size = 9;
+
+    if (width < min_size || height < min_size) {
+        return spec;
+    }
+
+    const std::size_t room_width  = std::min<std::size_t>(width - 2, 30);
+    const std::size_t room_height = std::min<std::size_t>(height - 2, 14);
+
+    if (room_width < min_size || room_height < min_size) {
+        return spec;
+    }
+
+    const std::size_t room_x = (width - room_width) / 2;
+    const std::size_t room_y = (height - room_height) / 2;
+    spec.rooms.push_back(RoomSpec{room_x, room_y, room_width, room_height});
+
+    const std::size_t center_x = room_x + room_width / 2;
+    const std::size_t center_y = room_y + room_height / 2;
+    const std::size_t left     = room_x + 1;
+    const std::size_t right    = room_x + room_width - 2;
+    const std::size_t top      = room_y + 1;
+    const std::size_t bottom   = room_y + room_height - 2;
+
+    spec.entrance  = Point{center_x, bottom};
+    spec.exit      = Point{center_x, top};
+    spec.exit_open = false;
+
+    spec.has_boss   = true;
+    spec.boss       = Point{center_x, center_y};
+    spec.boss_tier  = tier;
+    spec.final_boss = final_boss;
+
+    const std::size_t anchor_count = entities::boss_anchor_count(tier);
+
+    if (anchor_count >= 1) {
+        spec.anchors.push_back(Point{left, top});
+    }
+    if (anchor_count >= 2) {
+        spec.anchors.push_back(Point{right, bottom});
+    }
+    if (anchor_count >= 4) {
+        spec.anchors.push_back(Point{right, top});
+        spec.anchors.push_back(Point{left, bottom});
+    }
+
+    return spec;
+}
+
 void Map::generate(const MapSpec& spec) {
     clear();
 
@@ -704,6 +763,19 @@ void Map::generate(const MapSpec& spec) {
 
     if (spec.has_stand && is_floor(spec.stand)) {
         add(std::make_shared<entities::StoreStand>(spec.stand.x, spec.stand.y));
+    }
+
+    if (spec.has_boss && is_floor(spec.boss)) {
+        add(std::make_shared<entities::Boss>(spec.boss.x, spec.boss.y, spec.boss_tier,
+                                             spec.final_boss));
+    }
+
+    // Later bosses need an extra hit on each anchor to break the shield.
+    const int anchor_hits = static_cast<int>(3 + spec.boss_tier);
+    for (const Point& anchor : spec.anchors) {
+        if (is_floor(anchor)) {
+            add(std::make_shared<entities::Anchor>(anchor.x, anchor.y, anchor_hits));
+        }
     }
 
     for (const ItemSpec& item : spec.items) {

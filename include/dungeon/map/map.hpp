@@ -119,6 +119,16 @@ struct MapSpec {
     /// Places a decorative store counter at @p stand.
     bool  has_stand = false;
     Point stand;
+
+    /// Places a boss at @p boss with @p boss_tier difficulty.
+    bool        has_boss   = false;
+    Point       boss;
+    std::size_t boss_tier  = 1;
+    bool        final_boss = false;
+
+    /// Destructible anchors that shield the boss. Each point must be a floor
+    /// tile. An empty list makes the boss vulnerable from the start.
+    std::vector<Point> anchors;
 };
 
 inline const char32_t EXIT_GLYPH = '[';
@@ -174,6 +184,17 @@ class Map {
     /// enemies and no dungeon key. The returned spec is empty when @p width or
     /// @p height is too small to hold a store.
     [[nodiscard]] MapSpec make_store_spec(std::size_t width = 64, std::size_t height = 32);
+
+    /// Creates the layout of a boss arena.
+    ///
+    /// The arena is one room with the boss in the middle, the entrance at the
+    /// bottom, and the exit at the top. The exit stays locked until the boss is
+    /// defeated. Boss tier one has no anchors, tier two has two diagonal
+    /// anchors, and tier three and above have all four. Pass @p final_boss to
+    /// mark the last encounter. The returned spec is empty when the map is too
+    /// small to hold the arena.
+    [[nodiscard]] MapSpec make_boss_spec(std::size_t width, std::size_t height, std::size_t tier,
+                                         bool final_boss = false);
 
     /// Removes every tile and resets the map to zero width and height.
     void clear();

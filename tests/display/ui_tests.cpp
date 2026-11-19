@@ -16,6 +16,7 @@ using dungeon::display::tui::make_layout;
 using dungeon::game::Direction;
 using dungeon::game::Game;
 using dungeon::map::DoorSide;
+using dungeon::map::Map;
 using dungeon::map::MapSpec;
 using dungeon::map::entities::EnemyKind;
 using dungeon::map::entities::ItemKind;
@@ -293,6 +294,51 @@ DUNGEON_TEST(display, ui_shows_the_nearest_enemy_stats_in_the_right_panel) {
     CHECK(found_name);
     CHECK(found_attack);
     CHECK(found_defence);
+}
+
+DUNGEON_TEST(display, ui_shows_boss_health_anchors_and_run_progress) {
+    Map map;
+    Game game(map.make_boss_spec(40, 24, 2, false));
+
+    FrameBuffer  buffer(100, 30);
+    const Layout layout = make_layout(buffer.width(), buffer.height());
+    const HudState hud{game.messages(), game.chest_selection(), game.depth(), 7U, 1U};
+    dungeon::display::tui::draw_ui(buffer, game.map(), layout, hud);
+
+    const std::size_t x     = layout.stats.x + 2;
+    const std::size_t width = layout.stats.width - 4;
+
+    bool found_boss    = false;
+    bool found_hp      = false;
+    bool found_anchors = false;
+    bool found_keys    = false;
+    bool found_bosses  = false;
+
+    for (std::size_t y = layout.stats.y + 1; y < layout.stats.y + layout.stats.height - 1; ++y) {
+        const std::string text = row_text(buffer, x, y, width);
+
+        if (text.find("BOSS (2)") != std::string::npos) {
+            found_boss = true;
+        }
+        if (text.find("Boss HP:") != std::string::npos) {
+            found_hp = true;
+        }
+        if (text.find("Anchors:  2") != std::string::npos) {
+            found_anchors = true;
+        }
+        if (text.find("Keys:     7") != std::string::npos) {
+            found_keys = true;
+        }
+        if (text.find("Bosses:   1") != std::string::npos) {
+            found_bosses = true;
+        }
+    }
+
+    CHECK(found_boss);
+    CHECK(found_hp);
+    CHECK(found_anchors);
+    CHECK(found_keys);
+    CHECK(found_bosses);
 }
 
 DUNGEON_TEST(display, ui_marks_the_exit_after_the_key_is_equipped) {

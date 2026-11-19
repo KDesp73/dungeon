@@ -15,6 +15,8 @@ using dungeon::map::MapSpec;
 using dungeon::map::Point;
 using dungeon::map::RoomSpec;
 using dungeon::map::Tile;
+using dungeon::map::entities::Anchor;
+using dungeon::map::entities::Boss;
 using dungeon::map::entities::EnemyKind;
 using dungeon::map::entities::ItemKind;
 
@@ -1187,4 +1189,105 @@ DUNGEON_TEST(map, a_store_cannot_be_built_in_a_map_that_is_too_small)
     CHECK(spec.rooms.empty());
     CHECK_EQ(spec.width, 4U);
     CHECK_EQ(spec.height, 4U);
+}
+
+DUNGEON_TEST(map, make_boss_spec_builds_a_locked_single_room_arena)
+{
+    Map map;
+    const MapSpec spec = map.make_boss_spec(80, 30, 1, false);
+
+    REQUIRE(spec.rooms.size() == 1U);
+    CHECK(spec.has_boss);
+    CHECK(!spec.final_boss);
+    CHECK(spec.anchors.empty());
+    CHECK(spec.enemies.empty());
+    CHECK(spec.items.empty());
+    CHECK(!spec.exit_open);
+    CHECK(spec.has_shopkeeper == false);
+    CHECK(spec.entrance.x == spec.boss.x);
+    CHECK(spec.exit.x == spec.boss.x);
+    CHECK(spec.entrance.y > spec.boss.y);
+    CHECK(spec.exit.y < spec.boss.y);
+
+    map.generate(spec);
+
+    REQUIRE(map.player() != nullptr);
+    CHECK(!map.exit_unlocked());
+    CHECK(has_entity_at(map, 'B', spec.boss.x, spec.boss.y));
+
+    std::size_t bosses = 0;
+    for (const dungeon::map::EntityPtr& entity : map.entity_ptrs()) {
+        if (dynamic_cast<const Boss*>(entity.get()) != nullptr) {
+            ++bosses;
+        }
+    }
+    CHECK_EQ(bosses, 1U);
+}
+
+DUNGEON_TEST(map, make_boss_spec_scales_anchors_and_stats_with_the_tier)
+{
+    Map map;
+    const MapSpec first  = map.make_boss_spec(80, 30, 1, false);
+    const MapSpec second = map.make_boss_spec(80, 30, 2, false);
+    const MapSpec third  = map.make_boss_spec(80, 30, 3, false);
+    const MapSpec final  = map.make_boss_spec(80, 30, 5, true);
+
+    CHECK_EQ(first.anchors.size(), 0U);
+    CHECK_EQ(second.anchors.size(), 2U);
+    CHECK_EQ(third.anchors.size(), 4U);
+    CHECK_EQ(final.anchors.size(), 4U);
+    CHECK(final.final_boss);
+
+    const dungeon::map::RoomSpec& room = third.rooms.front();
+    const std::size_t left             = room.x + 1;
+    const std::size_t right            = room.x + room.width - 2;
+    const std::size_t top              = room.y + 1;
+    const std::size_t bottom           = room.y + room.height - 2;
+
+    CHECK_EQ(second.anchors[0].x, left);
+    CHECK_EQ(second.anchors[0].y, top);
+    CHECK_EQ(second.anchors[1].x, right);
+    CHECK_EQ(second.anchors[1].y, bottom);
+
+    std::set<std::pair<std::size_t, std::size_t>> corners{
+        {left, top}, {right, top}, {left, bottom}, {right, bottom}};
+    for (const dungeon::map::Point& anchor : third.anchors) {
+        CHECK(corners.count({anchor.x, anchor.y}) == 1U);
+    }
+
+    map.generate(third);
+
+    for (const dungeon::map::Point& anchor : third.anchors) {
+        CHECK(has_entity_at(map, 'A', anchor.x, anchor.y));
+    }
+
+    std::size_t anchors = 0;
+    for (const dungeon::map::EntityPtr& entity : map.entity_ptrs()) {
+        if (dynamic_cast<const Anchor*>(entity.get()) != nullptr) {
+            ++anchors;
+        }
+    }
+    CHECK_EQ(anchors, 4U);
+
+    map.generate(final);
+    const Boss* final_boss = nullptr;
+    for (const dungeon::map::EntityPtr& entity : map.entity_ptrs()) {
+        if (const auto* candidate = dynamic_cast<const Boss*>(entity.get())) {
+            final_boss = candidate;
+        }
+    }
+
+    REQUIRE(final_boss != nullptr);
+    CHECK(final_boss->is_final());
+    CHECK(final_boss->fireball_directions() == 8U);
+}
+
+DUNGEON_TEST(map, a_boss_arena_cannot_be_built_in_a_map_that_is_too_small)
+{
+    Map map;
+    const MapSpec spec = map.make_boss_spec(6, 6, 1, false);
+
+    CHECK(spec.rooms.empty());
+    CHECK_EQ(spec.width, 6U);
+    CHECK_EQ(spec.height, 6U);
 }

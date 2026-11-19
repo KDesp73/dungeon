@@ -44,6 +44,12 @@ struct HudState {
 
     /// Dungeon number shown in the stats panel.
     std::size_t dungeon_depth = 1;
+
+    /// Lifetime keys collected, shown in the stats panel.
+    std::size_t keys_collected = 0;
+
+    /// Number of bosses defeated, shown in the stats panel.
+    std::size_t bosses_defeated = 0;
 };
 
 /// Splits a framebuffer of @p width by @p height into the game UI regions.

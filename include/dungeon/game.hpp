@@ -20,6 +20,14 @@ inline constexpr std::size_t kStoreInterval = 5;
 /// Number of dungeons between character level increases.
 inline constexpr std::size_t kLevelUpInterval = 5;
 
+/// Number of dungeons between boss fights. A boss replaces the store that would
+/// otherwise occupy the same depth, but the character still levels up.
+inline constexpr std::size_t kBossInterval = 10;
+
+/// Depth of the final boss. Reaching it means fifty dungeons have been cleared;
+/// defeating it awards the fiftieth key and wins the run.
+inline constexpr std::size_t kFinalBossDepth = 50;
+
 /// Manhattan distance within which the shop menu opens.
 inline constexpr std::size_t kShopkeeperReach = 1;
 
@@ -104,6 +112,13 @@ struct RunStats {
     std::size_t enemies_killed     = 0;
     std::size_t potions_used       = 0;
     int         gold_collected     = 0;
+
+    /// Lifetime keys picked up. Ordinary dungeons hold one key and each defeated
+    /// boss drops one, so this count keeps pace with the dungeon depth.
+    std::size_t keys_collected = 0;
+
+    /// Number of bosses defeated, including the final boss.
+    std::size_t bosses_defeated = 0;
 };
 
 /// Owns the map and the rules that move the player through it.
@@ -170,8 +185,9 @@ class Game {
     /// increases every `kLevelUpInterval` dungeons, raising attack, defence,
     /// and stamina and restoring health. Every `kStoreInterval` dungeons the
     /// next dungeon is a store level: a room with a shopkeeper and an already
-    /// open exit. This is called automatically after stepping onto the unlocked
-    /// exit.
+    /// open exit. Every `kBossInterval` dungeons the boss replaces that store
+    /// with an arena, and `kFinalBossDepth` is the last arena. This is called
+    /// automatically after stepping onto the unlocked exit.
     void descend();
 
     /// Number of dungeons visited in this run, starting at one.
@@ -179,6 +195,19 @@ class Game {
 
     /// True while the current dungeon is a store level.
     [[nodiscard]] bool store_level() const noexcept { return _store_level; }
+
+    /// True while the current dungeon is a boss arena.
+    [[nodiscard]] bool boss_level() const noexcept { return _boss_level; }
+
+    /// The boss on the current map, or `nullptr` when there is none.
+    [[nodiscard]] map::entities::Boss*       boss() noexcept;
+    [[nodiscard]] const map::entities::Boss* boss() const noexcept;
+
+    /// Number of anchors still shielding the current boss.
+    [[nodiscard]] std::size_t anchors_remaining() const noexcept;
+
+    /// True once the final boss has been defeated.
+    [[nodiscard]] bool victory() const noexcept { return _victory; }
 
     /// True while the player has the shop menu open.
     [[nodiscard]] bool store_open() const noexcept { return _store_open; }
@@ -275,6 +304,28 @@ class Game {
     /// minimum of one. Sets `game_over()` when the player's health reaches zero.
     void attack_player(map::entities::Enemy& enemy);
 
+    /// Applies raw @p damage reduced by the player's defence and logs @p source.
+    /// Shared by melee attacks and fireballs.
+    void damage_player(int damage, const std::string& source);
+
+    /// Breaks one hit point off @p anchor and updates the boss's shield.
+    void attack_anchor(map::entities::Anchor& anchor);
+
+    /// Returns the living anchor standing on (@p x, @p y), or `nullptr`.
+    [[nodiscard]] map::entities::Anchor* anchor_at(std::size_t x, std::size_t y) noexcept;
+
+    /// Handles the defeat of a boss, dropping its key or granting victory.
+    void on_boss_defeated(bool final_boss, std::size_t x, std::size_t y);
+
+    /// Advances a boss's fireball and giggle timers.
+    void update_boss(map::entities::Boss& boss, double seconds);
+
+    /// Spawns a ring of fireballs around @p boss.
+    void spawn_fireballs(const map::entities::Boss& boss);
+
+    /// Moves every fireball one step, applying damage when one hits the player.
+    void update_fireballs(double seconds);
+
     /// Moves @p enemy one step toward the player using a breadth-first search
     /// around walls and other enemies.
     void chase_player(map::entities::Enemy& enemy);
@@ -320,7 +371,11 @@ class Game {
     std::size_t              _store_visits    = 0;
     bool                     _store_level     = false;
     bool                     _store_open      = false;
+    bool                     _boss_level      = false;
+    bool                     _victory         = false;
     bool                     _game_over       = false;
+    double                   _giggle_elapsed  = 0.0;
+    double                   _giggle_hold     = 0.0;
 };
 
 } // namespace dungeon::game

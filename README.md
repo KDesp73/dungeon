@@ -9,8 +9,8 @@ rule can be unit tested. The current build provides the build and test
 scaffolding, terminal-size detection, procedural ASCII map generation, a
 three-panel game UI, a fixed-timestep loop, a scene stack with title and pause
 screens, WASD player movement, action hooks for items, enemy AI with combat,
-consumable health potions, character progression, and periodic store levels
-with a walk-up shopkeeper.
+consumable health potions, character progression, periodic store levels with
+a walk-up shopkeeper, and escalating boss fights with a final victory.
 
 <img width="1272" height="1266" alt="Στιγμιότυπο οθόνης 2026-11-11, 11 22 26 πμ" src="https://github.com/user-attachments/assets/7b65b6e0-03ee-4aca-a7f1-3ac7ead340a9" />
 
@@ -25,7 +25,7 @@ with a walk-up shopkeeper.
 | Rendering    | Double-buffered framebuffer with game, stats, inventory, message, and chest panels |
 | Scenes       | Stack manager with title, game, store, and pause-menu scenes          |
 | Tests        | Lightweight harness with `core`, `display`, `game`, `map`, and `scene` suites |
-| Gameplay     | WASD/arrow movement, item action hooks, enemy AI, combat, coin drops, health potions, leveling, and store upgrades |
+| Gameplay     | WASD/arrow movement, item action hooks, enemy AI, combat, coin drops, health potions, leveling, store upgrades, and bosses |
 
 The executable accepts `--help`, `--version`, `--seed <n>`, and `--print-map`.
 `--seed` makes dungeon generation reproducible, and `--print-map` writes the
@@ -44,7 +44,9 @@ Press `Esc` again to resume or `Ctrl+C` to quit. When the player dies, press `R`
 to start a fresh run. Every fifth dungeon is a store level: walk close to the
 `&` shopkeeper to open the shop panel, use the arrow keys or `W`/`S` to choose
 an upgrade, `Enter` to buy it, and `Esc` to leave. The store exit is already
-open; step into the `[` to continue to the next dungeon.
+open; step into the `[` to continue to the next dungeon. Every tenth dungeon is
+a boss arena instead: break its corner anchors, then attack the boss. Defeat the
+final boss at depth 50 to win.
 
 ## Command line
 
@@ -85,6 +87,10 @@ Generated maps use these glyphs:
 | `d`      | shield (store upgrade)            |
 | `m`      | chainmail (store upgrade)         |
 | `b`      | boots (store upgrade)             |
+| `B`      | boss (every tenth dungeon)        |
+| `b`      | giggling boss (brief flicker)     |
+| `A`      | anchor shielding a boss           |
+| `*`      | fireball                          |
 | space    | empty space outside rooms         |
 
 Every map has a seed exposed through `Map::seed()`; the executable prints it and
@@ -176,7 +182,29 @@ them.
 The player's character level also rises every fifth dungeon. A level-up grants
 bonus attack, defence, and stamina and restores the player to full health. The
 stats panel shows both the character level and the current dungeon number, so
-the next store and level-up are always easy to anticipate.
+the next store and level-up are always easy to anticipate. It also tracks the
+lifetime keys collected and bosses defeated, which mark progress toward the
+final encounter.
+
+## Bosses
+
+Every tenth dungeon replaces the store with a single-room boss arena. The boss
+sits in the middle, fires volleys of outward-travelling `*` fireballs, and
+occasionally giggles (a brief `B` to `b` flicker with a message in the log).
+Walking into a fireball hurts; anchors and the boss itself block them. Boss
+health, attack, and fireball rate grow with each encounter.
+
+The first boss at depth 10 has no anchors and can be attacked immediately. The
+boss at depth 20 has two diagonal `A` anchors, and every later boss has all four
+corner anchors. While any anchor stands, the boss is invulnerable and melee
+attacks only chip the anchors. Once every anchor is destroyed the shield drops,
+the boss can be damaged, and its dropped key unlocks the exit at the top of the
+room.
+
+Depth 50 holds the final boss: four anchors, tougher stats, and diagonal
+fireballs in addition to the cardinal four. Defeating it claims the fiftieth
+key and wins the run. A victory panel shows the run summary; press `R` to start
+again.
 
 ## Requirements
 

@@ -122,6 +122,17 @@ const dungeon::map::entities::Enemy* nearest_enemy(const dungeon::map::Map& map)
     return nearest;
 }
 
+/// Returns the living boss on @p map, or `nullptr` when there is none.
+const dungeon::map::entities::Boss* boss_on_map(const dungeon::map::Map& map) {
+    for (const dungeon::map::EntityPtr& entity : map.entity_ptrs()) {
+        const auto* boss = dynamic_cast<const dungeon::map::entities::Boss*>(entity.get());
+        if (boss != nullptr && boss->alive()) {
+            return boss;
+        }
+    }
+    return nullptr;
+}
+
 /// Counts the living enemies on @p map.
 std::size_t enemy_count(const dungeon::map::Map& map) {
     std::size_t count = 0;
@@ -188,6 +199,7 @@ void draw_item_slots(FrameBuffer& buffer, const Rect& rect,
 }
 
 void draw_stats(FrameBuffer& buffer, const Rect& rect, std::uint32_t seed, std::size_t depth,
+                std::size_t keys_collected, std::size_t bosses_defeated,
                 const dungeon::map::entities::Player* player,
                 const dungeon::map::Map&              map) {
     panel(buffer, rect, "STATS");
@@ -219,6 +231,8 @@ void draw_stats(FrameBuffer& buffer, const Rect& rect, std::uint32_t seed, std::
     line("Attack:   " + std::to_string(stats.attack));
     line("Defense:  " + std::to_string(stats.defence));
     line("Gold:     " + std::to_string(stats.gold));
+    line("Keys:     " + std::to_string(keys_collected));
+    line("Bosses:   " + std::to_string(bosses_defeated));
     ++row;
     line("Seed:");
     line(std::to_string(seed));
@@ -226,19 +240,35 @@ void draw_stats(FrameBuffer& buffer, const Rect& rect, std::uint32_t seed, std::
     ++row;
     line("Enemies:  " + std::to_string(enemy_count(map)));
 
-    const dungeon::map::entities::Enemy* enemy = nearest_enemy(map);
-    if (enemy == nullptr) {
-        line("No enemies.");
+    // A boss is also the nearest enemy, so its dedicated block replaces the
+    // generic enemy details. This keeps the boss panel visible at common
+    // terminal heights.
+    const dungeon::map::entities::Boss* boss = boss_on_map(map);
+    if (boss != nullptr) {
+        ++row;
+        line("BOSS (" + std::to_string(boss->tier()) + "): " + std::string(boss->name()));
+        line("Boss HP:  " + std::to_string(boss->stats().hp) + "/" +
+             std::to_string(boss->max_hp()));
+        if (boss->vulnerable()) {
+            line("Shield:   down");
+        } else {
+            line("Anchors:  " + std::to_string(boss->anchors_remaining()));
+        }
         return;
     }
 
-    line(std::string(enemy->name()) + " (" + std::string(enemy->speed_label()) + ")");
-    line("HP:       " + std::to_string(enemy->stats().hp) + "/" +
-         std::to_string(enemy->max_hp()));
-    line("Attack:   " + std::to_string(enemy->stats().attack));
-    line("Defense:  " + std::to_string(enemy->stats().defence));
-    line("Bounty:   " + std::to_string(enemy->gold_min()) + "-" +
-         std::to_string(enemy->gold_max()));
+    const dungeon::map::entities::Enemy* enemy = nearest_enemy(map);
+    if (enemy != nullptr) {
+        line(std::string(enemy->name()) + " (" + std::string(enemy->speed_label()) + ")");
+        line("HP:       " + std::to_string(enemy->stats().hp) + "/" +
+             std::to_string(enemy->max_hp()));
+        line("Attack:   " + std::to_string(enemy->stats().attack));
+        line("Defense:  " + std::to_string(enemy->stats().defence));
+        line("Bounty:   " + std::to_string(enemy->gold_min()) + "-" +
+             std::to_string(enemy->gold_max()));
+    } else {
+        line("No enemies.");
+    }
 }
 
 void draw_inventory(FrameBuffer& buffer, const Rect& rect,
@@ -476,7 +506,8 @@ void draw_ui(FrameBuffer& buffer, const dungeon::map::Map& map, const Layout& la
     panel(buffer, layout.game, "DUNGEON");
     draw_map(buffer, map, layout.game);
 
-    draw_stats(buffer, layout.stats, map.seed(), hud.dungeon_depth, map.player(), map);
+    draw_stats(buffer, layout.stats, map.seed(), hud.dungeon_depth, hud.keys_collected,
+               hud.bosses_defeated, map.player(), map);
     draw_inventory(buffer, layout.inventory, map.player());
     draw_messages(buffer, layout.messages, hud.messages);
     draw_chest(buffer, layout.chest, nearby_chest(map), hud.selected_chest_item);
