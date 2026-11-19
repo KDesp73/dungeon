@@ -1,6 +1,7 @@
 #include "dungeon/game.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <limits>
 #include <memory>
@@ -581,19 +582,73 @@ void Game::update_boss(map::entities::Boss& boss, double seconds) {
     }
 
     boss.reset_fireball_timer();
+
+    // The opening volley is deterministic so the boss introduces its signature
+    // pattern; every later volley is rolled from the tier's weights. The final
+    // boss has the fullest mix, including the aimed burst.
+    const auto weights = map::entities::boss_attack_weights(boss.tier(), boss.is_final());
+    const auto pattern = boss.volleys_fired() == 0
+                             ? boss.opening_attack()
+                             : static_cast<map::entities::BossAttack>(_chance.weighted(weights));
+    boss.set_attack_pattern(pattern);
+    boss.record_volley();
     spawn_fireballs(boss);
 }
 
-void Game::spawn_fireballs(const map::entities::Boss& boss) {
-    constexpr int dx[8] = {0, 1, 0, -1, 1, 1, -1, -1};
-    constexpr int dy[8] = {-1, 0, 1, 0, -1, 1, -1, 1};
+void Game::spawn_fireballs(map::entities::Boss& boss) {
+    // Clockwise from up, so a rotating fan sweeps smoothly around the arena.
+    constexpr int dx[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+    constexpr int dy[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
+    // Positions of the four cardinal directions in the clockwise array.
+    constexpr std::size_t cardinal[4] = {0, 2, 4, 6};
 
-    const auto* player = _map.player();
-    const auto  count  = static_cast<std::size_t>(boss.fireball_directions());
+    using map::entities::BossAttack;
 
-    for (std::size_t i = 0; i < count; ++i) {
-        const auto next_x = static_cast<std::ptrdiff_t>(boss.x) + dx[i];
-        const auto next_y = static_cast<std::ptrdiff_t>(boss.y) + dy[i];
+    const auto* player  = _map.player();
+    const auto  count   = boss.fireball_directions();
+    const auto  pattern = boss.attack_pattern();
+
+    std::array<std::size_t, 8> directions{};
+    std::size_t                arms = 0;
+
+    if (pattern == BossAttack::Spiral) {
+        arms = boss.volley_size();
+        const auto rotation = boss.volley_rotation();
+        boss.advance_volley_rotation();
+        for (std::size_t i = 0; i < arms; ++i) {
+            const auto slot = (rotation + i) % count;
+            directions[i]   = count == 4 ? cardinal[slot] : slot;
+        }
+    } else if (pattern == BossAttack::Aimed && player != nullptr) {
+        const int sign_x = player->x > boss.x ? 1 : (player->x < boss.x ? -1 : 0);
+        const int sign_y = player->y > boss.y ? 1 : (player->y < boss.y ? -1 : 0);
+
+        std::size_t centre = 0;
+        for (std::size_t dir = 0; dir < 8; ++dir) {
+            if (dx[dir] == sign_x && dy[dir] == sign_y) {
+                centre = dir;
+                break;
+            }
+        }
+
+        arms = map::entities::BOSS_AIMED_ARMS;
+        for (std::size_t i = 0; i < arms; ++i) {
+            directions[i] = (centre + 7 + i) % 8; // one left, centre, one right
+        }
+    } else {
+        // Ring, or an aimed pattern before the player exists.
+        arms = count;
+        for (std::size_t slot = 0; slot < count; ++slot) {
+            directions[slot] = count == 4 ? cardinal[slot] : slot;
+        }
+    }
+
+    for (std::size_t i = 0; i < arms; ++i) {
+        const auto step_x = dx[directions[i]];
+        const auto step_y = dy[directions[i]];
+
+        const auto next_x = static_cast<std::ptrdiff_t>(boss.x) + step_x;
+        const auto next_y = static_cast<std::ptrdiff_t>(boss.y) + step_y;
 
         if (next_x < 0 || next_y < 0 || next_x >= static_cast<std::ptrdiff_t>(_map.width()) ||
             next_y >= static_cast<std::ptrdiff_t>(_map.height())) {
@@ -617,7 +672,8 @@ void Game::spawn_fireballs(const map::entities::Boss& boss) {
         }
 
         static_cast<void>(_map.add(std::make_shared<map::entities::Fireball>(
-            x, y, dx[i], dy[i], boss.stats().attack, boss.fireball_range())));
+            x, y, step_x, step_y, boss.stats().attack, boss.fireball_range(),
+            boss.fireball_step_interval())));
     }
 }
 

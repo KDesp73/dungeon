@@ -196,7 +196,16 @@ Every tenth dungeon replaces the store with a single-room boss arena. The boss
 sits in the middle, fires volleys of outward-travelling `*` fireballs, and
 occasionally giggles (a brief `B` to `b` flicker with a message in the log).
 Walking into a fireball hurts; anchors and the boss itself block them. Boss
-health, attack, and fireball rate grow with each encounter.
+health, attack, and fireball rate grow with each encounter. Volleys come faster
+and fireballs travel faster as the tiers rise.
+
+The first boss fires four cardinal fireballs at once. From the second boss on,
+diagonals join the volley for an eight-way ring. The later bosses open with a
+rotating spiral, then mix their attacks: a full ring, a clockwise spiral that
+advances two or three steps per volley, and an aimed three-way burst at the
+player's current position. The spiral fan widens from two arms at tier three to
+four at the final boss. Early bosses only use the ring; the final boss uses all
+three patterns, with the aimed burst most likely.
 
 The first boss at depth 10 has no anchors and can be attacked immediately. The
 boss at depth 20 has two diagonal `A` anchors, and every later boss has all four
@@ -205,10 +214,9 @@ attacks only chip the anchors. Once every anchor is destroyed the shield drops,
 the boss can be damaged, and its dropped key unlocks the exit at the top of the
 room.
 
-Depth 50 holds the final boss: four anchors, tougher stats, and diagonal
-fireballs in addition to the cardinal four. Defeating it claims the fiftieth
-key and wins the run. A victory panel shows the run summary; press `R` to start
-again.
+Depth 50 holds the final boss: four anchors, tougher stats, and the full mix of
+fireball patterns. Defeating it claims the fiftieth key and wins the run. A
+victory panel shows the run summary; press `R` to start again.
 
 ## Requirements
 

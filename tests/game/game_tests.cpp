@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -18,6 +19,7 @@ using dungeon::map::DoorSide;
 using dungeon::map::MapSpec;
 using dungeon::map::entities::Anchor;
 using dungeon::map::entities::Boss;
+using dungeon::map::entities::BossAttack;
 using dungeon::map::entities::EnemyKind;
 using dungeon::map::entities::Fireball;
 using dungeon::map::entities::ItemKind;
@@ -77,6 +79,29 @@ std::size_t count_fireballs(const Game& game) {
         }
     }
     return count;
+}
+
+std::set<std::pair<int, int>> fireball_directions(const Game& game) {
+    std::set<std::pair<int, int>> result;
+    for (const dungeon::map::EntityPtr& entity : game.map().entity_ptrs()) {
+        const auto* fireball = dynamic_cast<const Fireball*>(entity.get());
+        if (fireball != nullptr) {
+            result.emplace(fireball->dx(), fireball->dy());
+        }
+    }
+    return result;
+}
+
+void clear_fireballs(Game& game) {
+    std::vector<int> ids;
+    for (const dungeon::map::EntityPtr& entity : game.map().entity_ptrs()) {
+        if (dynamic_cast<const Fireball*>(entity.get()) != nullptr) {
+            ids.push_back(entity->id());
+        }
+    }
+    for (const int id : ids) {
+        static_cast<void>(game.map().remove(id));
+    }
 }
 
 Anchor* first_anchor(Game& game) {
@@ -1238,6 +1263,144 @@ DUNGEON_TEST(game, a_boss_fires_fireballs_that_travel_away_from_it) {
     }
 
     CHECK(moved > 0U);
+}
+
+DUNGEON_TEST(game, a_second_tier_boss_fires_diagonals_along_with_cardinals) {
+    dungeon::map::Map map;
+    const MapSpec spec = map.make_boss_spec(40, 24, 2, false);
+    Game game(spec);
+
+    const Boss* boss = game.boss();
+    REQUIRE(boss != nullptr);
+    CHECK_EQ(boss->fireball_directions(), 8U);
+    CHECK_EQ(boss->volley_size(), 8U);
+    CHECK(!boss->spiral_fire());
+
+    game.update(boss->fireball_interval() + 0.01);
+
+    REQUIRE(count_fireballs(game) == 8U);
+    const auto directions = fireball_directions(game);
+    CHECK(directions.count({0, -1}) == 1U);  // up
+    CHECK(directions.count({1, -1}) == 1U);  // up-right
+    CHECK(directions.count({1, 0}) == 1U);   // right
+    CHECK(directions.count({1, 1}) == 1U);   // down-right
+    CHECK(directions.count({0, 1}) == 1U);   // down
+    CHECK(directions.count({-1, 1}) == 1U);  // down-left
+    CHECK(directions.count({-1, 0}) == 1U);  // left
+    CHECK(directions.count({-1, -1}) == 1U); // up-left
+}
+
+DUNGEON_TEST(game, attack_pattern_weights_escalate_with_tier) {
+    using dungeon::map::entities::boss_attack_weights;
+
+    const auto early = boss_attack_weights(1, false);
+    CHECK_EQ(early[static_cast<std::size_t>(BossAttack::Ring)], 1.0);
+    CHECK_EQ(early[static_cast<std::size_t>(BossAttack::Spiral)], 0.0);
+    CHECK_EQ(early[static_cast<std::size_t>(BossAttack::Aimed)], 0.0);
+
+    const auto middle = boss_attack_weights(4, false);
+    CHECK(middle[static_cast<std::size_t>(BossAttack::Aimed)] > 0.0);
+
+    const auto final_boss = boss_attack_weights(5, true);
+    CHECK(final_boss[static_cast<std::size_t>(BossAttack::Aimed)] >
+          middle[static_cast<std::size_t>(BossAttack::Aimed)]);
+}
+
+DUNGEON_TEST(game, later_bosses_open_with_a_fast_spiral) {
+    dungeon::map::Map map;
+    const MapSpec spec = map.make_boss_spec(40, 24, 4, false);
+    Game game(spec);
+
+    Boss* boss = game.boss();
+    REQUIRE(boss != nullptr);
+    CHECK(boss->spiral_fire());
+    CHECK_EQ(boss->fireball_directions(), 8U);
+    CHECK_EQ(boss->volley_size(), 3U);
+    CHECK_EQ(boss->volley_rotation_step(), 3U);
+    CHECK_EQ(boss->opening_attack(), BossAttack::Spiral);
+    CHECK_EQ(boss->volley_rotation(), 0U);
+
+    game.update(boss->fireball_interval() + 0.01);
+
+    CHECK_EQ(boss->attack_pattern(), BossAttack::Spiral);
+    CHECK_EQ(boss->volley_rotation(), 3U);
+    CHECK_EQ(boss->volleys_fired(), 1U);
+    REQUIRE(fireball_directions(game).size() == 3U);
+
+    const auto before = boss->volley_rotation();
+    boss->advance_volley_rotation();
+    CHECK_EQ(boss->volley_rotation(), (before + 3) % 8);
+}
+
+DUNGEON_TEST(game, the_final_boss_fires_a_wider_faster_fan) {
+    dungeon::map::Map map;
+    const MapSpec spec = map.make_boss_spec(40, 24, 5, true);
+    Game game(spec);
+
+    const Boss* boss = game.boss();
+    REQUIRE(boss != nullptr);
+    CHECK(boss->spiral_fire());
+    CHECK_EQ(boss->volley_size(), 4U);
+    CHECK(boss->fireball_step_interval() < dungeon::map::entities::FIREBALL_STEP_INTERVAL);
+    CHECK(boss->fireball_interval() < dungeon::map::entities::BOSS_FIREBALL_INTERVAL_BASE);
+
+    game.update(boss->fireball_interval() + 0.01);
+    CHECK_EQ(count_fireballs(game), 4U);
+}
+
+DUNGEON_TEST(game, later_bosses_randomize_their_attack_patterns) {
+    dungeon::map::Map map;
+    const MapSpec spec = map.make_boss_spec(40, 24, 5, true);
+    Game game(spec);
+
+    Boss* boss = game.boss();
+    REQUIRE(boss != nullptr);
+
+    std::set<BossAttack> seen;
+    for (int i = 0; i < 25; ++i) {
+        game.update(boss->fireball_interval() + 0.01);
+        seen.insert(boss->attack_pattern());
+        clear_fireballs(game);
+        if (game.game_over()) {
+            break;
+        }
+    }
+
+    // The opening spiral is fixed, but later volleys must vary.
+    CHECK(seen.size() >= 2U);
+}
+
+DUNGEON_TEST(game, late_bosses_can_aim_a_burst_at_the_player) {
+    dungeon::map::Map map;
+    const MapSpec spec = map.make_boss_spec(40, 24, 5, true);
+    Game game(spec);
+
+    Boss* boss = game.boss();
+    REQUIRE(boss != nullptr);
+
+    // Place the player due east of the boss. When the aimed pattern is rolled,
+    // its fan should be centred on that direction.
+    game.player()->place(boss->x + 3, boss->y);
+
+    bool saw_aimed = false;
+    for (int i = 0; i < 30; ++i) {
+        clear_fireballs(game);
+        game.update(boss->fireball_interval() + 0.01);
+
+        if (boss->attack_pattern() != BossAttack::Aimed) {
+            continue;
+        }
+
+        saw_aimed = true;
+        const auto directions = fireball_directions(game);
+        CHECK_EQ(directions.size(), 3U);
+        CHECK(directions.count({1, -1}) == 1U);
+        CHECK(directions.count({1, 0}) == 1U);
+        CHECK(directions.count({1, 1}) == 1U);
+        break;
+    }
+
+    CHECK(saw_aimed);
 }
 
 DUNGEON_TEST(game, a_fireball_hurts_the_player_and_burns_out) {

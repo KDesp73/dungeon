@@ -320,8 +320,8 @@ class Game {
     /// Advances a boss's fireball and giggle timers.
     void update_boss(map::entities::Boss& boss, double seconds);
 
-    /// Spawns a ring of fireballs around @p boss.
-    void spawn_fireballs(const map::entities::Boss& boss);
+    /// Spawns one fireball volley around @p boss using its selected pattern.
+    void spawn_fireballs(map::entities::Boss& boss);
 
     /// Moves every fireball one step, applying damage when one hits the player.
     void update_fireballs(double seconds);

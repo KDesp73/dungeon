@@ -2,6 +2,7 @@
 
 #include "dungeon/display/style.hpp"
 
+#include <array>
 #include <cstddef>
 #include <optional>
 #include <string_view>
@@ -187,17 +188,60 @@ inline constexpr int FINAL_BOSS_ATTACK_BONUS = 8;
 
 /// Delay between fireball volleys. Each tier makes the boss faster, down to the
 /// minimum; the final boss fires slightly faster than an ordinary boss.
-inline constexpr double BOSS_FIREBALL_INTERVAL_BASE = 2.6;
-inline constexpr double BOSS_FIREBALL_INTERVAL_STEP = 0.3;
-inline constexpr double BOSS_FIREBALL_INTERVAL_MIN  = 1.0;
+inline constexpr double BOSS_FIREBALL_INTERVAL_BASE = 2.1;
+inline constexpr double BOSS_FIREBALL_INTERVAL_STEP = 0.25;
+inline constexpr double BOSS_FIREBALL_INTERVAL_MIN  = 0.75;
 inline constexpr double FINAL_BOSS_FIREBALL_BONUS   = 0.2;
 
 /// How far a fireball travels before burning out.
 inline constexpr std::size_t FIREBALL_RANGE_BASE      = 12;
 inline constexpr std::size_t FIREBALL_RANGE_PER_TIER  = 2;
 
-/// Seconds between fireball cell steps.
-inline constexpr double FIREBALL_STEP_INTERVAL = 0.18;
+/// Seconds between fireball cell steps, and the boss-only speed-up per tier.
+inline constexpr double FIREBALL_STEP_INTERVAL      = 0.18;
+inline constexpr double BOSS_FIREBALL_STEP_PER_TIER = 0.02;
+inline constexpr double BOSS_FIREBALL_STEP_MIN      = 0.10;
+
+/// First tier whose boss can fire a rotating spiral.
+inline constexpr std::size_t BOSS_SPIRAL_MIN_TIER = 3;
+
+/// Maximum number of adjacent directions fired in one spiral volley.
+inline constexpr std::size_t BOSS_SPIRAL_MAX_ARMS = 4;
+
+/// Directions fired in one aimed burst.
+inline constexpr std::size_t BOSS_AIMED_ARMS = 3;
+
+/// Clockwise steps the spiral advances per volley. The faster step keeps the
+/// pattern moving instead of letting the player walk between slow arms.
+inline constexpr std::size_t BOSS_SPIRAL_ROTATION_STEP       = 2;
+inline constexpr std::size_t BOSS_FAST_SPIRAL_ROTATION_STEP  = 3;
+/// Tier where the spiral speeds up and aimed bursts become available.
+inline constexpr std::size_t BOSS_ADVANCED_MIN_TIER = 4;
+
+/// Attack patterns a boss can choose between.
+enum class BossAttack : unsigned char {
+    Ring,   ///< All directions at once.
+    Spiral, ///< A rotating fan that sweeps around the arena.
+    Aimed,  ///< A tight fan fired toward the player's current position.
+};
+
+/// Relative chance of each `BossAttack`, indexed by the enum value.
+///
+/// Early bosses keep the readable ring. Later bosses mix in the spiral, and the
+/// final boss adds the aimed burst to keep the fight from becoming predictable.
+[[nodiscard]] constexpr std::array<double, 3> boss_attack_weights(std::size_t tier,
+                                                                  bool final_boss) noexcept {
+    if (tier < BOSS_SPIRAL_MIN_TIER) {
+        return {1.0, 0.0, 0.0};
+    }
+    if (final_boss) {
+        return {0.15, 0.40, 0.45};
+    }
+    if (tier >= BOSS_ADVANCED_MIN_TIER) {
+        return {0.20, 0.50, 0.30};
+    }
+    return {0.35, 0.65, 0.0};
+}
 
 /// How often a boss "giggles", and for how long the animation plays.
 inline constexpr double BOSS_GIGGLE_INTERVAL = 6.0;
@@ -331,7 +375,9 @@ class Enemy : public Entity, public Alive {
 /// A static arena boss.
 ///
 /// Bosses do not walk and do not melee. Instead they fire volleys of fireballs
-/// in all cardinal directions (eight for the final boss). They take no damage
+/// in all directions, with diagonals from tier two onward. Later bosses choose
+/// between a full ring, a rotating spiral, and an aimed burst. The spiral now
+/// advances several steps per volley so it stays dangerous. They take no damage
 /// while any anchor is still standing.
 class Boss final : public Enemy {
   public:
@@ -367,8 +413,54 @@ class Boss final : public Enemy {
         return FIREBALL_RANGE_BASE + (_tier - 1) * FIREBALL_RANGE_PER_TIER;
     }
 
-    /// Cardinal directions for ordinary bosses, diagonals too for the final one.
-    [[nodiscard]] std::size_t fireball_directions() const noexcept { return _final ? 8U : 4U; }
+    /// Cardinal directions for the first boss; diagonals join from tier two.
+    [[nodiscard]] std::size_t fireball_directions() const noexcept {
+        return _tier >= 2 ? 8U : 4U;
+    }
+
+    /// True when this boss is allowed to fire a rotating spiral.
+    [[nodiscard]] bool spiral_fire() const noexcept {
+        return _tier >= BOSS_SPIRAL_MIN_TIER;
+    }
+
+    /// Pattern used for the opening volley. It opens with its signature spiral
+    /// before later volleys are randomized.
+    [[nodiscard]] BossAttack opening_attack() const noexcept {
+        return spiral_fire() ? BossAttack::Spiral : BossAttack::Ring;
+    }
+
+    /// Pattern selected for the current volley, and the number fired so far.
+    [[nodiscard]] BossAttack attack_pattern() const noexcept { return _attack; }
+    void set_attack_pattern(BossAttack pattern) noexcept { _attack = pattern; }
+    [[nodiscard]] std::size_t volleys_fired() const noexcept { return _volleys_fired; }
+    void record_volley() noexcept { ++_volleys_fired; }
+
+    /// Directions fired in one spiral volley. The fan widens with each tier.
+    [[nodiscard]] std::size_t volley_size() const noexcept {
+        if (!spiral_fire()) {
+            return fireball_directions();
+        }
+        const std::size_t arms = _tier - 1;
+        return arms > BOSS_SPIRAL_MAX_ARMS ? BOSS_SPIRAL_MAX_ARMS : arms;
+    }
+
+    /// Seconds between fireball cell steps. Deeper bosses shoot faster, so
+    /// their volleys are harder to walk out of.
+    [[nodiscard]] double fireball_step_interval() const noexcept {
+        const double saved = BOSS_FIREBALL_STEP_PER_TIER * static_cast<double>(_tier - 1);
+        const double interval = FIREBALL_STEP_INTERVAL - saved;
+        return interval > BOSS_FIREBALL_STEP_MIN ? interval : BOSS_FIREBALL_STEP_MIN;
+    }
+
+    /// Current clockwise offset of the spiral, and the step to the next volley.
+    [[nodiscard]] std::size_t volley_rotation() const noexcept { return _volley_rotation; }
+    [[nodiscard]] std::size_t volley_rotation_step() const noexcept {
+        return _tier >= BOSS_ADVANCED_MIN_TIER ? BOSS_FAST_SPIRAL_ROTATION_STEP
+                                               : BOSS_SPIRAL_ROTATION_STEP;
+    }
+    void advance_volley_rotation() noexcept {
+        _volley_rotation = (_volley_rotation + volley_rotation_step()) % 8;
+    }
 
     /// A short visual flicker used for the boss's "giggle".
     void set_giggling(bool giggling) noexcept { set_tile(giggling ? 'b' : 'B'); }
@@ -384,6 +476,9 @@ class Boss final : public Enemy {
     bool        _final;
     std::size_t _anchors_remaining;
     double      _fireball_elapsed = 0.0;
+    std::size_t _volley_rotation  = 0;
+    std::size_t _volleys_fired    = 0;
+    BossAttack  _attack           = BossAttack::Ring;
 };
 
 /// A destructible pillar protecting a boss.
@@ -412,17 +507,19 @@ class Anchor : public Entity {
 /// A fireball travelling in a straight line away from a boss.
 class Fireball : public Entity {
   public:
-    Fireball(std::size_t x, std::size_t y, int dx, int dy, int damage, std::size_t range)
+    Fireball(std::size_t x, std::size_t y, int dx, int dy, int damage, std::size_t range,
+             double step_interval = FIREBALL_STEP_INTERVAL)
         : Entity('*', Color::BrightRed, Style::Bold, x, y), _dx(dx), _dy(dy), _damage(damage),
-          _range(range) {}
+          _range(range), _step_interval(step_interval) {}
 
     [[nodiscard]] int         dx() const noexcept { return _dx; }
     [[nodiscard]] int         dy() const noexcept { return _dy; }
     [[nodiscard]] int         damage() const noexcept { return _damage; }
     [[nodiscard]] bool        expired() const noexcept { return _range == 0; }
+    [[nodiscard]] double      step_interval() const noexcept { return _step_interval; }
 
     void advance(double seconds) noexcept { _elapsed += seconds; }
-    [[nodiscard]] bool step_ready() const noexcept { return _elapsed >= FIREBALL_STEP_INTERVAL; }
+    [[nodiscard]] bool step_ready() const noexcept { return _elapsed >= _step_interval; }
     void reset_step_timer() noexcept { _elapsed = 0.0; }
     void consume_step() noexcept {
         if (_range > 0) {
@@ -435,6 +532,7 @@ class Fireball : public Entity {
     int         _dy;
     int         _damage;
     std::size_t _range;
+    double      _step_interval;
     double      _elapsed = 0.0;
 };
 
