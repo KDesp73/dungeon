@@ -126,6 +126,41 @@ const char* direction_word(KeyKind kind) noexcept {
     }
 }
 
+bool is_movement(KeyKind kind) noexcept {
+    return kind == KeyKind::Up || kind == KeyKind::Down || kind == KeyKind::Left ||
+           kind == KeyKind::Right;
+}
+
+KeyKind opposite(KeyKind kind) noexcept {
+    switch (kind) {
+    case KeyKind::Up:
+        return KeyKind::Down;
+    case KeyKind::Down:
+        return KeyKind::Up;
+    case KeyKind::Left:
+        return KeyKind::Right;
+    case KeyKind::Right:
+        return KeyKind::Left;
+    default:
+        return kind;
+    }
+}
+
+AgentObservation::Cell destination_cell(AgentObservation::Cell from, KeyKind kind) noexcept {
+    switch (kind) {
+    case KeyKind::Up:
+        return {from.x, from.y - 1};
+    case KeyKind::Down:
+        return {from.x, from.y + 1};
+    case KeyKind::Left:
+        return {from.x - 1, from.y};
+    case KeyKind::Right:
+        return {from.x + 1, from.y};
+    default:
+        return from;
+    }
+}
+
 bool has_obstacle(const AgentObservation& observation, std::size_t x, std::size_t y) noexcept {
     for (const AgentObservation::Obstacle& obstacle : observation.obstacles) {
         if (obstacle.x == x && obstacle.y == y) {
@@ -161,7 +196,7 @@ bool low_health(const AgentObservation& observation) noexcept {
 std::optional<AgentObservation::Cell> best_loot(const AgentObservation& observation) {
     const AgentObservation::LootInfo* best = nullptr;
     for (const AgentObservation::LootInfo& item : observation.loot) {
-        if (!in_bounds(observation, item.cell.x, item.cell.y) ||
+        if (!item.collectable || !in_bounds(observation, item.cell.x, item.cell.y) ||
             !walkable(observation, item.cell.x, item.cell.y)) {
             continue;
         }
@@ -261,14 +296,25 @@ std::vector<LegalAction> legal_actions(const AgentObservation& observation) {
         return actions;
     }
 
+    const auto uncollectable = [&](AgentObservation::Cell cell) {
+        return std::any_of(observation.loot.begin(), observation.loot.end(),
+                           [&](const AgentObservation::LootInfo& item) {
+                               return !item.collectable && same_cell(item.cell, cell);
+                           });
+    };
+
     const auto add_direction = [&](const char* id, KeyKind kind, std::size_t x, std::size_t y) {
         if (!in_bounds(observation, x, y) || !walkable(observation, x, y)) {
             return;
         }
         const AgentObservation::Cell cell{x, y};
         std::ostringstream description;
-        description << "Move " << direction_word(kind) << " into "
-                    << glyph_name(glyph_at(observation, cell));
+        description << "Move " << direction_word(kind) << " into ";
+        if (uncollectable(cell)) {
+            description << "an item you cannot carry";
+        } else {
+            description << glyph_name(glyph_at(observation, cell));
+        }
         actions.push_back({id, description.str(), KeyEvent::from_kind(kind)});
     };
 
@@ -379,7 +425,78 @@ std::optional<KeyEvent> step_toward(const AgentObservation& observation,
     return std::nullopt;
 }
 
-AgentDecision decide(const AgentObservation& observation, const KevAnswers& answers) {
+void DecisionMemory::record(AgentObservation::Cell from, KeyKind kind) {
+    if (!is_movement(kind)) {
+        return;
+    }
+    _cells.push_back(from);
+    _moves.push_back(kind);
+    if (_cells.size() > 12) {
+        _cells.pop_front();
+    }
+    if (_moves.size() > 12) {
+        _moves.pop_front();
+    }
+}
+
+bool DecisionMemory::stalled() const noexcept {
+    if (_cells.size() < 5) {
+        return false;
+    }
+    const AgentObservation::Cell current = _cells.back();
+    std::size_t visits = 0;
+    for (const AgentObservation::Cell& cell : _cells) {
+        if (same_cell(cell, current)) {
+            ++visits;
+        }
+    }
+    return visits >= 3;
+}
+
+std::optional<KeyKind>
+DecisionMemory::break_move(const AgentObservation& observation,
+                           const std::vector<LegalAction>& actions) const {
+    if (!stalled()) {
+        return std::nullopt;
+    }
+
+    const KeyKind reverse = _moves.empty() ? KeyKind::None : opposite(_moves.back());
+    std::size_t best_visits = std::numeric_limits<std::size_t>::max();
+    std::optional<KeyKind> best;
+    for (const LegalAction& action : actions) {
+        if (!is_movement(action.key.kind)) {
+            continue;
+        }
+        const AgentObservation::Cell destination = destination_cell(observation.player,
+                                                                    action.key.kind);
+        if (has_obstacle(observation, destination.x, destination.y)) {
+            continue;
+        }
+
+        std::size_t visits = 0;
+        for (const AgentObservation::Cell& cell : _cells) {
+            if (same_cell(cell, destination)) {
+                ++visits;
+            }
+        }
+        // Prefer a direction we have not just reversed, but never reject the
+        // only available exit from a dead end.
+        if (best == std::nullopt || visits < best_visits ||
+            (visits == best_visits && action.key.kind != reverse && *best == reverse)) {
+            best        = action.key.kind;
+            best_visits = visits;
+        }
+    }
+    return best;
+}
+
+void DecisionMemory::clear() noexcept {
+    _cells.clear();
+    _moves.clear();
+}
+
+AgentDecision decide(const AgentObservation& observation, const KevAnswers& answers,
+                     DecisionMemory* memory) {
     AgentDecision decision;
 
     if (observation.scene == SceneKind::Title) {
@@ -427,6 +544,22 @@ AgentDecision decide(const AgentObservation& observation, const KevAnswers& answ
         return decision;
     }
 
+    // Remember every movement so a repeated back-and-forth can be interrupted.
+    struct MoveRecorder {
+        DecisionMemory*        memory;
+        AgentObservation::Cell from;
+        AgentDecision&         decision;
+
+        ~MoveRecorder() {
+            if (memory == nullptr || decision.keys.empty()) {
+                return;
+            }
+            if (is_movement(decision.keys.front().kind)) {
+                memory->record(from, decision.keys.front().kind);
+            }
+        }
+    } recorder{memory, observation.player, decision};
+
     const bool heal = low_health(observation) && observation.potions > 0 &&
                       (!answers.received || answers.danger.score >= 1.5 ||
                        answers.engage.noul < 0.35);
@@ -447,6 +580,16 @@ AgentDecision decide(const AgentObservation& observation, const KevAnswers& answ
         }
         if (answers.chest.choice == "prev") {
             push_character(decision, '[');
+            return decision;
+        }
+    }
+
+    // If the last few decisions just retraced the same two cells, ignore Kev's
+    // move (and the usual goal targets) for one step and walk somewhere new.
+    if (memory != nullptr) {
+        if (const auto escape = memory->break_move(observation, actions)) {
+            push(decision, KeyEvent::from_kind(*escape));
+            memory->clear();
             return decision;
         }
     }

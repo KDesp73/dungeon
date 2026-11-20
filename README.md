@@ -92,7 +92,7 @@ stderr so you can see what the agent observed and which keys it chose:
 You will see lines like:
 
 ```
-[agent] observe depth=1 hp=100 gold=0 enemies=1 key=0
+[agent] observe depth=1 hp=100 gold=0 enemies=1 key=0 at=49,23
 [agent] -> up
 ```
 
@@ -105,6 +105,13 @@ for coins and chests whenever there is no more urgent threat. A key within six
 cells is grabbed before optional loot — even if Kev asked to loot — because it
 unlocks the exit for a very small detour; only an enemy within striking distance
 takes precedence.
+
+Items the player cannot carry (for example when the inventory is full) are left
+out of the advertised loot and described as unusable in the available moves, so
+Kev does not keep walking back to them. As a final safeguard, the bot watches its
+recent positions: if it starts retracing the same two cells, the next move walks
+to the least-recently-visited tile instead, breaking any left/right loop even
+when Kev keeps requesting it.
 
 The game can drive itself through the same `KeyEvent` path as human input, so the
 simulation and every scene behave exactly as they do interactively. Choose a
@@ -365,40 +372,6 @@ ctest --preset asan
 
 Undefined behaviour aborts on the first occurrence instead of continuing with
 a corrupted state.
-
-## Repository layout
-
-```text
-dungeon/
-├── AGENT.md                  project context and development plan
-├── CMakeLists.txt            top level build definition
-├── CMakePresets.json         convenience build configurations
-├── cmake/                    build system modules (warnings, sanitizers)
-├── docs/                     architecture and design notes
-├── include/dungeon/          public headers, mirrors src/
-│   ├── core/                 fixed-timestep ticker and project version
-│   ├── display/              framebuffer, terminal size, and UI helpers
-│   ├── map/                  map generation and tile API
-│   ├── scene/                scene stack, title screen, game, store, and pause scenes
-│   └── game.hpp              movement, direction, and action hooks
-├── src/
-│   ├── core/                 ticker and version implementations
-│   ├── display/              framebuffer, terminal, and UI implementations
-│   ├── map/                  map generation, tiles, and text output
-│   ├── scene/                scene manager, title, game, store, and pause scenes
-│   ├── game.cpp              movement and action dispatch
-│   └── main.cpp              process entry point
-└── tests/
-    ├── core/                 core suite
-    ├── display/              display suite
-    ├── game/                 movement and action suite
-    ├── map/                  map suite
-    ├── scene/                scene-stack and pause-menu suite
-    └── test_harness.*        lightweight test framework
-```
-
-New subsystems get a directory under `include/dungeon/` and `src/`; see
-[docs/architecture.md](docs/architecture.md).
 
 ## Conventions
 

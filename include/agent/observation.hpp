@@ -54,6 +54,7 @@ struct AgentObservation {
         int         gold  = 0;
         Cell        cell;
         std::size_t distance = 0;
+        bool        collectable = true; ///< False when the inventory cannot hold it.
     };
 
     struct StoreOption {

@@ -2,6 +2,7 @@
 
 #include "agent/agent.hpp"
 
+#include <deque>
 #include <map>
 #include <string>
 #include <vector>
@@ -48,10 +49,38 @@ struct KevAnswers {
     bool   received = false;
 };
 
+/// Short movement history used to detect and break A -> B -> A -> B loops.
+///
+/// Agents own one of these and pass it to `decide()`. The policy stays pure when
+/// no memory is supplied (as in tests and one-shot callers).
+class DecisionMemory {
+  public:
+    /// Remembers that a decision left @p from by moving in direction @p kind.
+    void record(AgentObservation::Cell from, controls::KeyKind kind);
+
+    /// True when the last few moves revisit the same cells over and over.
+    [[nodiscard]] bool stalled() const noexcept;
+
+    /// Least-visited legal move away from the current loop, if stalled.
+    [[nodiscard]] std::optional<controls::KeyKind>
+    break_move(const AgentObservation& observation,
+               const std::vector<LegalAction>& actions) const;
+
+    /// Forgets the history after a loop has been broken.
+    void clear() noexcept;
+
+  private:
+    std::deque<AgentObservation::Cell> _cells;
+    std::deque<controls::KeyKind>      _moves;
+};
+
 /// Combines Kev's answers with deterministic rules and returns legal keys.
 ///
-/// Passing a default-constructed `KevAnswers` runs the scripted fallback.
-[[nodiscard]] AgentDecision decide(const AgentObservation& observation, const KevAnswers& answers);
+/// Passing a default-constructed `KevAnswers` runs the scripted fallback. When
+/// @p memory is supplied, repeated back-and-forth movement is broken by taking
+/// the least-recently-visited legal step instead of the requested move.
+[[nodiscard]] AgentDecision decide(const AgentObservation& observation, const KevAnswers& answers,
+                                   DecisionMemory* memory = nullptr);
 
 /// First step on a path toward @p target, avoiding observed hazards when
 /// possible. Used by both the scripted bot and the fallback policy.

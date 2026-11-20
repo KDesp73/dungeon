@@ -1,6 +1,7 @@
 #pragma once
 
 #include "agent/agent.hpp"
+#include "agent/policy.hpp"
 
 #include <optional>
 
@@ -14,6 +15,7 @@ class ScriptedAgent final : public Agent {
 
   private:
     std::optional<AgentDecision> _decision;
+    DecisionMemory               _memory;
 };
 
 } // namespace dungeon::agent

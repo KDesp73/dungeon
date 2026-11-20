@@ -57,6 +57,7 @@ class KevAgent final : public Agent {
     std::deque<Request>           _pending;
     std::optional<Result>         _result;
     std::optional<AgentObservation> _last;
+    DecisionMemory                _memory;
     std::size_t                   _current_id    = 0;
     std::size_t                   _next_id       = 0;
     std::size_t                   _stale_replies = 0;

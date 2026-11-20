@@ -412,6 +412,59 @@ DUNGEON_TEST(agent, legal_actions_name_loot_glyphs) {
     CHECK(names_coins);
 }
 
+DUNGEON_TEST(agent, uncollectable_loot_is_ignored) {
+    AgentObservation observation = make_loot_observation();
+    observation.loot[0].collectable = false;
+
+    // With no collectable target the fallback walks somewhere other than the
+    // item it cannot pick up.
+    const auto decision = dungeon::agent::decide(observation, KevAnswers{});
+    REQUIRE(decision.keys.size() == 1);
+    CHECK(decision.keys.front() != KeyEvent::from_kind(KeyKind::Right));
+
+    // Kev is not offered the item as a target and sees it as unusable in the
+    // move descriptions.
+    const auto actions = dungeon::agent::legal_actions(observation);
+    for (const auto& action : actions) {
+        if (action.id == "right") {
+            CHECK(action.description.find("cannot carry") != std::string::npos);
+        }
+    }
+    const nlohmann::json state = nlohmann::json::parse(observation.to_json());
+    CHECK_EQ(state["loot"].size(), std::size_t(0));
+}
+
+DUNGEON_TEST(agent, decision_memory_breaks_left_right_loop) {
+    AgentObservation observation = make_observation();
+    observation.tiles         = {"-----", ".....", "-----"};
+    observation.visible       = observation.tiles;
+    observation.player        = {2, 1};
+    observation.key_on_map    = false;
+    observation.exit_unlocked = false;
+    observation.loot.clear();
+
+    dungeon::agent::DecisionMemory memory;
+    std::vector<KeyKind> chosen;
+    for (std::size_t step = 0; step < 6; ++step) {
+        KevAnswers answers;
+        answers.received    = true;
+        answers.move.choice = step % 2 == 0 ? "left" : "right";
+        const auto decision = dungeon::agent::decide(observation, answers, &memory);
+        REQUIRE(decision.keys.size() == 1);
+        chosen.push_back(decision.keys.front().kind);
+        if (decision.keys.front().kind == KeyKind::Left) {
+            --observation.player.x;
+        } else if (decision.keys.front().kind == KeyKind::Right) {
+            ++observation.player.x;
+        }
+    }
+
+    CHECK_EQ(chosen[0], KeyKind::Left);
+    CHECK_EQ(chosen[1], KeyKind::Right);
+    // The sixth step ignores Kev's "right" and heads for the unvisited cell.
+    CHECK_EQ(chosen[5], KeyKind::Left);
+}
+
 DUNGEON_TEST(agent, request_includes_loot_incentive) {
     const std::string request = dungeon::agent::build_kev_request(make_loot_observation(), 3);
     CHECK(request.find("collect nearby coins") != std::string::npos);

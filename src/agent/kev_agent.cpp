@@ -54,14 +54,14 @@ std::optional<AgentDecision> KevAgent::poll() {
         }
         if (_last) {
             _ticks = 0;
-            return decide(*_last, result.answers);
+            return decide(*_last, result.answers, &_memory);
         }
         return std::nullopt;
     }
 
     if (_last && ++_ticks >= _fallback_interval) {
         _ticks = 0;
-        return decide(*_last, KevAnswers{});
+        return decide(*_last, KevAnswers{}, &_memory);
     }
     return std::nullopt;
 }

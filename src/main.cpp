@@ -210,6 +210,8 @@ class Application {
                                   << " gold=" << (player != nullptr ? player->stats().gold : 0)
                                   << " enemies=" << (game.nearest_enemy() != nullptr ? 1 : 0)
                                   << " key=" << (player != nullptr && player->has_key() ? 1 : 0)
+                                  << " at=" << (player != nullptr ? player->x : 0) << ","
+                                  << (player != nullptr ? player->y : 0)
                                   << '\n';
                     }
 #endif

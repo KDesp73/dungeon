@@ -6,7 +6,7 @@ namespace dungeon::agent {
 
 void ScriptedAgent::observe(const game::Game& game, const scene::SceneManager& scenes) {
     const AgentObservation observation = AgentObservation::from(game, scenes);
-    _decision                          = decide(observation, KevAnswers{});
+    _decision                          = decide(observation, KevAnswers{}, &_memory);
 }
 
 std::optional<AgentDecision> ScriptedAgent::poll() {

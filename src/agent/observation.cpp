@@ -252,7 +252,8 @@ AgentObservation AgentObservation::from(const game::Game& game,
                 const AgentObservation::Cell cell{item->x, item->y};
                 observation.loot.push_back(AgentObservation::LootInfo{
                     item_name(item->kind()), item->tile(), item->gold(), cell,
-                    manhattan(observation.player, cell)});
+                    manhattan(observation.player, cell),
+                    player != nullptr && player->can_equip(item->kind())});
             }
         } else if (const auto* enemy = dynamic_cast<const Enemy*>(entity.get())) {
             if (enemy->stats().hp > 0) {
@@ -338,7 +339,7 @@ std::string AgentObservation::to_json() const {
     std::size_t loot_gold = 0;
     const LootInfo* nearest = nullptr;
     for (const LootInfo& item : loot) {
-        if (!in_visible_crop(*this, item.cell)) {
+        if (!item.collectable || !in_visible_crop(*this, item.cell)) {
             continue;
         }
         loot_items.push_back({{"name", item.name},
