@@ -39,6 +39,10 @@ void Entity::place(std::size_t xx, std::size_t yy) {
     this->y = yy;
 }
 
+void Entity::restore_id_counter(int next_id) noexcept {
+    entity_id = next_id > 0 ? next_id : 1;
+}
+
 bool Player::equip(Item item) {
     if (item.upgradable()) {
         const auto existing =

@@ -5,6 +5,7 @@
 #include "dungeon/scene/scene_manager.hpp"
 
 #include <cstddef>
+#include <string>
 #include <utility>
 
 namespace dungeon::scene {
@@ -40,11 +41,30 @@ bool TitleScene::starts_game(const controls::KeyEvent& key) const noexcept {
     return is_enter(key) && is_enter(_config.start_key);
 }
 
+bool TitleScene::loads_game(const controls::KeyEvent& key) const noexcept {
+    if (_config.load_key.is_none() || !_config.on_load) {
+        return false;
+    }
+
+    if (key == _config.load_key) {
+        return true;
+    }
+
+    return _config.load_key.kind == controls::KeyKind::Character &&
+           _config.load_key.value == 'l' && key.kind == controls::KeyKind::Character &&
+           (key.value == 'L');
+}
+
 bool TitleScene::handle_key(const controls::KeyEvent& key, SceneContext& context) {
     if (starts_game(key)) {
         if (_config.on_start) {
             _config.on_start(context);
         }
+        return true;
+    }
+
+    if (loads_game(key)) {
+        _config.status = _config.on_load(context) ? "Game loaded." : "Could not load the game.";
         return true;
     }
 
@@ -75,17 +95,27 @@ void TitleScene::draw(display::FrameBuffer& buffer, SceneContext& /*context*/) {
         display::tui::label_centered(buffer, _config.subtitle, screen, title_y + 2, kSubtitleStyle);
     }
 
-    if (!_config.prompt.empty()) {
-        const std::size_t prompt_y = (buffer.height() * 3) / 4;
-        if (prompt_y < buffer.height()) {
-            display::tui::label_centered(buffer, _config.prompt, screen, prompt_y, kPromptStyle);
-        }
+    const std::size_t prompt_y = (buffer.height() * 3) / 4;
+
+    if (!_config.prompt.empty() && prompt_y < buffer.height()) {
+        display::tui::label_centered(buffer, _config.prompt, screen, prompt_y, kPromptStyle);
+    }
+
+    if (!_config.load_hint.empty() && prompt_y + 1 < buffer.height()) {
+        display::tui::label_centered(buffer, _config.load_hint, screen, prompt_y + 1, kHintStyle);
     }
 
     if (!_config.hint.empty() && buffer.height() > 2) {
         const std::size_t hint_y = (buffer.height() * 3) / 4 + 2;
         if (hint_y < buffer.height() - 1) {
             display::tui::label_centered(buffer, _config.hint, screen, hint_y, kHintStyle);
+        }
+    }
+
+    if (!_config.status.empty() && buffer.height() > 3) {
+        const std::size_t status_y = (buffer.height() * 3) / 4 + 3;
+        if (status_y < buffer.height() - 1) {
+            display::tui::label_centered(buffer, _config.status, screen, status_y, kPromptStyle);
         }
     }
 }

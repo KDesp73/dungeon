@@ -149,6 +149,8 @@ DUNGEON_TEST(scene, game_scene_pause_menu_saves_and_quits) {
     CHECK(saved);
     CHECK_EQ(pause->status(), std::string("Game saved."));
 
+    // Save game -> Load game -> Quit
+    CHECK(manager.handle_key(KeyEvent::from_kind(KeyKind::Down), context));
     CHECK(manager.handle_key(KeyEvent::from_kind(KeyKind::Down), context));
     CHECK(manager.handle_key(KeyEvent::from_character('\n'), context));
     CHECK(context.quit_requested);
@@ -246,12 +248,13 @@ DUNGEON_TEST(scene, game_over_screen_shows_run_stats) {
     CHECK(frame.find("Press R to restart") != std::string::npos);
 }
 
-DUNGEON_TEST(scene, game_scene_pause_menu_reports_when_saving_is_unavailable) {
+DUNGEON_TEST(scene, game_scene_pause_menu_reports_save_failures) {
     SceneManager manager;
     SceneContext context{manager};
 
     GameSceneConfig config;
-    config.layout = make_test_spec();
+    config.layout     = make_test_spec();
+    config.save_path  = "dungeon-missing-save-directory/dungeon.sav";
 
     manager.push(std::make_unique<GameScene>(std::move(config)));
     REQUIRE(manager.handle_key(KeyEvent::from_kind(KeyKind::Escape), context));
@@ -261,7 +264,7 @@ DUNGEON_TEST(scene, game_scene_pause_menu_reports_when_saving_is_unavailable) {
 
     CHECK(manager.handle_key(KeyEvent::from_kind(KeyKind::Down), context));
     CHECK(manager.handle_key(KeyEvent::from_character('\n'), context));
-    CHECK_EQ(pause->status(), std::string("Saving is not available yet."));
+    CHECK(pause->status().find("Could not") != std::string::npos);
 }
 
 DUNGEON_TEST(scene, game_scene_opens_the_shop_menu_near_the_shopkeeper) {

@@ -24,11 +24,23 @@ struct TitleSceneConfig {
     /// Optional hint shown under the prompt.
     std::string hint = "Esc to quit";
 
+    /// Optional hint for the load key, drawn just above @ref hint.
+    std::string load_hint = "L: load";
+
     /// Key that starts the game. Enter (CR or LF) is accepted by default.
     controls::KeyEvent start_key = controls::KeyEvent::from_character('\n');
 
+    /// Key that loads a saved game. Both `l` and `L` are accepted by default.
+    controls::KeyEvent load_key = controls::KeyEvent::from_character('l');
+
+    /// Called when the load key is pressed. Return false to show an error.
+    std::function<bool(SceneContext&)> on_load;
+
     /// Called when the start key is pressed.
     std::function<void(SceneContext&)> on_start;
+
+    /// Status line drawn under the prompt, used for load errors.
+    std::string status;
 
     /// When true, Escape requests that the game loop exits.
     bool quit_on_escape = true;
@@ -47,8 +59,12 @@ class TitleScene final : public Scene {
 
     [[nodiscard]] const TitleSceneConfig& config() const noexcept { return _config; }
 
+    /// Updates the status line drawn under the title prompt.
+    void set_status(std::string status) { _config.status = std::move(status); }
+
   private:
     [[nodiscard]] bool starts_game(const controls::KeyEvent& key) const noexcept;
+    [[nodiscard]] bool loads_game(const controls::KeyEvent& key) const noexcept;
 
     TitleSceneConfig _config;
 };

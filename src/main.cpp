@@ -4,6 +4,7 @@
 #include "dungeon/display/buffer.hpp"
 #include "dungeon/display/term.hpp"
 #include "dungeon/display/ui.hpp"
+#include "dungeon/save/save.hpp"
 #include "dungeon/scene/game_scene.hpp"
 #include "dungeon/scene/scene_manager.hpp"
 #include "dungeon/scene/title_scene.hpp"
@@ -46,7 +47,9 @@ void handle_interrupt(int) {
 /// from an Emscripten main loop. Both share the same per-frame work.
 class Application {
   public:
-    explicit Application(std::optional<std::uint32_t> seed) : _ticker(tick_interval()) {
+    explicit Application(std::optional<std::uint32_t> seed,
+                         std::string save_path = dungeon::save::kDefaultSavePath)
+        : _ticker(tick_interval()) {
         const auto        layout = dungeon::display::tui::make_layout(_buffer.width(),
                                                                      _buffer.height());
         const std::size_t map_width  = layout.game.width > 2 ? layout.game.width - 2 : 0;
@@ -58,15 +61,32 @@ class Application {
             std::string(dungeon::core::kProjectName) + ' ' + std::string(dungeon::core::kVersion);
         title.prompt   = "Press ENTER to start";
         title.hint     = "Esc to quit";
-        title.on_start = [map_width, map_height,
-                          seed](dungeon::scene::SceneContext& scene_context) {
+        title.on_start = [map_width, map_height, seed,
+                          save_path](dungeon::scene::SceneContext& scene_context) {
             dungeon::scene::GameSceneConfig config;
-            config.width  = map_width;
-            config.height = map_height;
-            config.seed   = seed;
+            config.width     = map_width;
+            config.height    = map_height;
+            config.seed      = seed;
+            config.save_path = save_path;
 
             scene_context.scenes.replace(
                 std::make_unique<dungeon::scene::GameScene>(std::move(config)));
+        };
+        title.on_load = [map_width, map_height, seed,
+                         save_path](dungeon::scene::SceneContext& scene_context) {
+            dungeon::scene::GameSceneConfig config;
+            config.width     = map_width;
+            config.height    = map_height;
+            config.seed      = seed;
+            config.save_path = save_path;
+
+            auto scene = std::make_unique<dungeon::scene::GameScene>(std::move(config));
+            if (!scene->load_game().ok) {
+                return false;
+            }
+
+            scene_context.scenes.replace(std::move(scene));
+            return true;
         };
 
         _scenes.push(std::make_unique<dungeon::scene::TitleScene>(std::move(title)));
@@ -126,6 +146,8 @@ int main(int argc, char** argv) {
     std::uint32_t      seed = 0;
     const CLI::Option* seed_option =
         app.add_option("-s,--seed", seed, "Seed used to generate the dungeon");
+    std::string save_path = dungeon::save::kDefaultSavePath;
+    app.add_option("--save-file", save_path, "Path used by the in-game save and load actions");
     bool print_map = false;
     app.add_flag("-p,--print-map", print_map, "Print a generated dungeon map and exit");
 
@@ -155,7 +177,7 @@ int main(int argc, char** argv) {
 
     std::signal(SIGINT, handle_interrupt);
 
-    Application application(seed_value);
+    Application application(seed_value, save_path);
 
     const dungeon::controls::TerminalSession terminal;
     dungeon::display::tui::hide_cursor();

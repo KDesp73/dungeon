@@ -269,6 +269,8 @@ class Map {
     [[nodiscard]] std::vector<entities::Entity> entities() const;
 
   private:
+    friend class ::dungeon::save::BinaryCodec;
+
     std::size_t       _width  = 0;
     std::size_t       _height = 0;
     Point             _entrance;

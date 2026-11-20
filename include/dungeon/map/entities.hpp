@@ -9,6 +9,10 @@
 #include <utility>
 #include <vector>
 
+namespace dungeon::save {
+class BinaryCodec;
+}
+
 namespace dungeon::map::entities {
 
 using Color = dungeon::display::Color;
@@ -36,7 +40,13 @@ class Entity {
     void                show() { _visible = true; }
     void                place(std::size_t xx, std::size_t yy);
 
+    /// Sets the next generated entity id. Used by the save loader so restored
+    /// entities keep their original ids without colliding with new ones.
+    static void restore_id_counter(int next_id) noexcept;
+
   private:
+    friend class ::dungeon::save::BinaryCodec;
+
     char  _tile;
     Color _color;
     Style _style;
@@ -115,6 +125,8 @@ class Alive {
     std::size_t          level_up() { return ++_stats.level; }
 
   protected:
+    friend class ::dungeon::save::BinaryCodec;
+
     Stats _stats;
 };
 
@@ -363,6 +375,8 @@ class Enemy : public Entity, public Alive {
     void set_wander_direction(int direction) noexcept { _wander_direction = direction; }
 
   private:
+    friend class ::dungeon::save::BinaryCodec;
+
     EnemyKind _kind;
     int       _max_hp;
     int       _gold_bonus       = 0;
@@ -472,6 +486,8 @@ class Boss final : public Enemy {
     void reset_fireball_timer() noexcept { _fireball_elapsed = 0.0; }
 
   private:
+    friend class ::dungeon::save::BinaryCodec;
+
     std::size_t _tier;
     bool        _final;
     std::size_t _anchors_remaining;
@@ -501,6 +517,8 @@ class Anchor : public Entity {
     [[nodiscard]] int  hits() const noexcept { return _hits; }
 
   private:
+    friend class ::dungeon::save::BinaryCodec;
+
     int _hits;
 };
 
@@ -528,6 +546,8 @@ class Fireball : public Entity {
     }
 
   private:
+    friend class ::dungeon::save::BinaryCodec;
+
     int         _dx;
     int         _dy;
     int         _damage;
@@ -664,6 +684,8 @@ class Item : public Entity {
     }
 
   private:
+    friend class ::dungeon::save::BinaryCodec;
+
     Stats       _base_stats;
     Stats       _stats_diff;
     ItemType    _type;
@@ -779,6 +801,8 @@ class Chest : public Item {
     }
 
   private:
+    friend class ::dungeon::save::BinaryCodec;
+
     std::vector<Item> _contents;
 };
 
@@ -823,6 +847,8 @@ class Player : public Entity, public Alive {
     void               drop(ItemKind kind);
 
   private:
+    friend class ::dungeon::save::BinaryCodec;
+
     std::vector<Item> _inventory;
 };
 

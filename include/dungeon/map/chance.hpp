@@ -5,6 +5,11 @@
 #include <cstdint>
 #include <random>
 #include <span>
+
+namespace dungeon::save {
+class BinaryCodec;
+}
+
 namespace dungeon::map::chance {
 
 /// Probability that a room contains a single coin.
@@ -199,6 +204,8 @@ public:
     }
 
 private:
+    friend class ::dungeon::save::BinaryCodec;
+
     std::uint32_t _seed = static_cast<std::uint32_t>(std::random_device{}());
     std::mt19937 _rng{_seed};
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "dungeon/game.hpp"
+#include "dungeon/save/save.hpp"
 #include "dungeon/scene/scene.hpp"
 
 #include <cstddef>
@@ -46,7 +47,13 @@ struct GameSceneConfig {
                                  "Shop:      Enter buy, Esc leave";
 
     /// Called when the player chooses "Save game" in the pause menu.
+    ///
+    /// When empty, the game is written to @ref save_path using the binary save
+    /// format. A custom handler is useful for tests or alternative storage.
     SaveHandler save_handler;
+
+    /// File used by the built-in save and load actions.
+    std::string save_path = save::kDefaultSavePath;
 };
 
 /// The playable dungeon scene.
@@ -68,6 +75,12 @@ class GameScene final : public Scene {
 
     /// Replaces the pause menu's save callback.
     void set_save_handler(SaveHandler handler) { _config.save_handler = std::move(handler); }
+
+    /// Loads the configured save file into this scene's game.
+    ///
+    /// The scene keeps ownership of the loaded `Game`, so this works before the
+    /// scene is pushed as well as from the pause menu.
+    [[nodiscard]] save::SaveResult load_game();
 
   private:
     void        open_pause_menu(SceneContext& context);

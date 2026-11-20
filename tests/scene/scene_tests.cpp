@@ -277,6 +277,41 @@ DUNGEON_TEST(scene, title_scene_draws_its_title_and_prompt) {
     CHECK(buffer_contains(buffer, "Esc to quit"));
 }
 
+DUNGEON_TEST(scene, title_scene_loads_a_saved_game) {
+    SceneManager manager;
+    SceneContext context{manager};
+
+    int loads = 0;
+    TitleSceneConfig config;
+    config.on_load = [&loads](SceneContext&) {
+        ++loads;
+        return true;
+    };
+
+    manager.push(std::make_unique<TitleScene>(std::move(config)));
+    auto* title = dynamic_cast<TitleScene*>(manager.top());
+    REQUIRE(title != nullptr);
+
+    CHECK(manager.handle_key(KeyEvent::from_character('L'), context));
+    CHECK_EQ(loads, 1);
+    CHECK_EQ(title->config().status, std::string("Game loaded."));
+}
+
+DUNGEON_TEST(scene, title_scene_reports_a_failed_load) {
+    SceneManager manager;
+    SceneContext context{manager};
+
+    TitleSceneConfig config;
+    config.on_load = [](SceneContext&) { return false; };
+
+    manager.push(std::make_unique<TitleScene>(std::move(config)));
+    auto* title = dynamic_cast<TitleScene*>(manager.top());
+    REQUIRE(title != nullptr);
+
+    CHECK(manager.handle_key(KeyEvent::from_character('l'), context));
+    CHECK_EQ(title->config().status, std::string("Could not load the game."));
+}
+
 DUNGEON_TEST(scene, pause_scene_navigates_and_runs_option_actions) {
     SceneManager manager;
     SceneContext context{manager};

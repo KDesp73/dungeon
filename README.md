@@ -24,13 +24,17 @@ a walk-up shopkeeper, and escalating boss fights with a final victory.
 | Map          | Optional 3x3 room grid, orthogonal corridors, entrance/exit, item spawns |
 | Rendering    | Double-buffered framebuffer with game, stats, inventory, message, and chest panels |
 | Scenes       | Stack manager with title, game, store, and pause-menu scenes          |
-| Tests        | Lightweight harness with `core`, `display`, `game`, `map`, and `scene` suites |
+| Save/load    | Versioned, checksummed binary saves with atomic writes and in-game load actions |
+| Tests        | Lightweight harness with `core`, `display`, `game`, `map`, `save`, and `scene` suites |
 | Gameplay     | WASD/arrow movement, item action hooks, enemy AI, combat, coin drops, health potions, leveling, store upgrades, and bosses |
 
-The executable accepts `--help`, `--version`, `--seed <n>`, and `--print-map`.
+The executable accepts `--help`, `--version`, `--seed <n>`, `--save-file <path>`,
+and `--print-map`.
 `--seed` makes dungeon generation reproducible, and `--print-map` writes the
-generated dungeon to stdout, reports its seed on stderr, and exits. Without those
-options it opens the title screen; press `Enter` to start a run. The fixed-timestep
+generated dungeon to stdout, reports its seed on stderr, and exits. `--save-file`
+changes the path used by the in-game save and load actions; the default is
+`dungeon.sav` in the current directory. Without those options it opens the title
+screen; press `Enter` to start a run or `L` to load the saved game. The fixed-timestep
 loop draws the generated map in the left game viewport, a stats column on the
 right, and an inventory, message log, and chest panel across the bottom.
 Simulation time advances at 60 ticks per second; rendering is paced to the next
@@ -39,8 +43,10 @@ matching direction. While next to a chest, `[` and `]` cycle through its items,
 `1`-`9` select one directly, and `Enter` takes the selected item. Move into an
 enemy to attack it. While carrying a health potion, press `H` to drink one and
 recover a random amount of health. Press `Esc` to pause; the pause menu freezes
-the simulation, lists the controls, and offers Resume, Save game, and Quit.
-Press `Esc` again to resume or `Ctrl+C` to quit. When the player dies, press `R`
+the simulation, lists the controls, and offers Resume, Save game, Load game, and
+Quit. Saving writes the whole run — including RNG state — to the binary save file;
+loading replaces the current run with it. Press `Esc` again to resume or `Ctrl+C`
+to quit. When the player dies, press `R`
 to start a fresh run. Every fifth dungeon is a store level: walk close to the
 `&` shopkeeper to open the shop panel, use the arrow keys or `W`/`S` to choose
 an upgrade, `Enter` to buy it, and `Esc` to leave. The store exit is already
@@ -58,6 +64,7 @@ release builds and never jumps past the final boss.
 ./build/dev/dungeon --help
 ./build/dev/dungeon --version
 ./build/dev/dungeon --seed 12345
+./build/dev/dungeon --save-file /tmp/dungeon.sav
 ./build/dev/dungeon --print-map --seed 12345
 ```
 

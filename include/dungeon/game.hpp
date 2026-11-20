@@ -12,6 +12,10 @@
 #include <utility>
 #include <vector>
 
+namespace dungeon::save {
+class BinaryCodec;
+}
+
 namespace dungeon::game {
 
 /// Number of dungeons between store levels.
@@ -283,6 +287,8 @@ class Game {
     [[nodiscard]] bool take_selected_chest_item();
 
   private:
+    friend class ::dungeon::save::BinaryCodec;
+
     /// Applies the built-in effect of stepping on @p event's item.
     ///
     /// Coins and diamonds are added to the player's gold, while keys, potions,

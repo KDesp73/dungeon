@@ -44,6 +44,10 @@ tasks.json
 xcuserdata/
 cmake-build-*/
 
+# --- Game Saves ---
+*.sav
+*.sav.tmp
+
 # --- Debug & Profiling ---
 *.log
 *.su

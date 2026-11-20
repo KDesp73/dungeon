@@ -1,6 +1,7 @@
 #include "dungeon/scene/game_scene.hpp"
 
 #include "dungeon/display/ui.hpp"
+#include "dungeon/save/save.hpp"
 #include "dungeon/scene/pause_scene.hpp"
 #include "dungeon/scene/scene_manager.hpp"
 #include "dungeon/scene/store_scene.hpp"
@@ -193,6 +194,10 @@ void GameScene::open_pause_menu(SceneContext& context) {
                         return std::string{};
                     }},
         PauseOption{"Save game", [this](SceneContext& /*menu_context*/) { return save_game(); }},
+        PauseOption{"Load game", [this](SceneContext& /*menu_context*/) {
+                        const save::SaveResult result = load_game();
+                        return result.ok ? std::string("Game loaded.") : result.message;
+                    }},
         PauseOption{"Quit",
                     [](SceneContext& menu_context) {
                         menu_context.quit_requested = true;
@@ -204,11 +209,22 @@ void GameScene::open_pause_menu(SceneContext& context) {
 }
 
 std::string GameScene::save_game() {
-    if (!_config.save_handler) {
-        return "Saving is not available yet.";
+    if (_config.save_handler) {
+        return _config.save_handler(_game) ? "Game saved." : "Could not save the game.";
     }
 
-    return _config.save_handler(_game) ? "Game saved." : "Could not save the game.";
+    const save::SaveResult result = save::save_to_file(_game, _config.save_path);
+    return result.ok ? "Game saved." : result.message;
+}
+
+save::SaveResult GameScene::load_game() {
+    const save::SaveResult result = save::load_from_file(_game, _config.save_path);
+    if (result.ok) {
+        // Avoid reopening the store immediately if the save was made next to a
+        // shopkeeper and the player has since moved away.
+        _store_near = _game.nearby_shopkeeper() != nullptr;
+    }
+    return result;
 }
 
 #ifdef DUNGEON_DEV
