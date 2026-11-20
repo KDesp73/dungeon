@@ -57,6 +57,29 @@ class SceneManager {
         return _stack.empty() ? nullptr : _stack.back().get();
     }
 
+    /// Returns the topmost scene whose type is @p T, or `nullptr` when none is
+    /// on the stack. Useful for finding the game underneath a store or pause
+    /// overlay.
+    template <typename T>
+    [[nodiscard]] T* find() noexcept {
+        for (auto it = _stack.rbegin(); it != _stack.rend(); ++it) {
+            if (auto* scene = dynamic_cast<T*>(it->get())) {
+                return scene;
+            }
+        }
+        return nullptr;
+    }
+
+    template <typename T>
+    [[nodiscard]] const T* find() const noexcept {
+        for (auto it = _stack.rbegin(); it != _stack.rend(); ++it) {
+            if (const auto* scene = dynamic_cast<const T*>(it->get())) {
+                return scene;
+            }
+        }
+        return nullptr;
+    }
+
     /// Updates the top scene and any underlying scenes it keeps alive.
     void update(Duration delta, SceneContext& context);
 

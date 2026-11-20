@@ -25,11 +25,11 @@ a walk-up shopkeeper, and escalating boss fights with a final victory.
 | Rendering    | Double-buffered framebuffer with game, stats, inventory, message, and chest panels |
 | Scenes       | Stack manager with title, game, store, and pause-menu scenes          |
 | Save/load    | Versioned, checksummed binary saves with atomic writes and in-game load actions |
-| Tests        | Lightweight harness with `core`, `display`, `game`, `map`, `save`, and `scene` suites |
+| Tests        | Lightweight harness with `agent`, `core`, `display`, `game`, `map`, `save`, and `scene` suites |
 | Gameplay     | WASD/arrow movement, item action hooks, enemy AI, combat, coin drops, health potions, leveling, store upgrades, and bosses |
 
 The executable accepts `--help`, `--version`, `--seed <n>`, `--save-file <path>`,
-and `--print-map`.
+`--print-map`, and the agent flags `--agent`, `--kev-url`, `--kev-interval`, and `--headless`.
 `--seed` makes dungeon generation reproducible, and `--print-map` writes the
 generated dungeon to stdout, reports its seed on stderr, and exits. `--save-file`
 changes the path used by the in-game save and load actions; the default is
@@ -70,6 +70,31 @@ release builds and never jumps past the final boss.
 
 Passing the same seed to `--print-map` twice produces the same dungeon.
 Without `--seed`, a fresh random seed is chosen and reported on stderr.
+
+### Automated agents
+
+The game can drive itself through the same `KeyEvent` path as human input, so the
+simulation and every scene behave exactly as they do interactively. Choose a
+driver with `--agent <none|scripted|kev>`:
+
+```sh
+# Deterministic BFS-based baseline; no model or network needed.
+./build/dev/dungeon --agent scripted --seed 12345 --headless
+
+# Typed judgments from a local Kev server (default: http://127.0.0.1:8008).
+./build/dev/dungeon --agent kev --seed 12345 --headless \
+    --kev-url http://127.0.0.1:8008 --kev-interval 12
+```
+
+`--headless` skips terminal rendering, which is useful for unattended evaluation;
+the map still uses a fixed 64x32 layout in that mode. `--kev-interval` sets the
+observation cadence in 60 Hz ticks (default 12). The agent never mutates game
+state directly: it observes structured `Game`/`Map` state, answers a small set of
+typed `choice`, `noul`, and `score` questions, and the C++ policy maps the answers
+to legal keys. An asynchronous worker performs the HTTP request, so inference
+never blocks the simulation; stale replies are discarded and a deterministic
+fallback keeps the bot moving while a request is in flight. The native Kev client
+is optional (see `DUNGEON_ENABLE_KEV` below) and is not built for WebAssembly.
 
 ## Map output
 
@@ -233,8 +258,17 @@ victory panel shows the run summary; press `R` to start again.
 - A POSIX system: Linux, macOS or a similar Unix
 
 No third party libraries are required at runtime. CLI11 is used for command
-line parsing and is fetched automatically by CMake when a system package is not
-available, so the first configure needs network access.
+line parsing and nlohmann/json is used by the agent's typed request/response
+layer; both are fetched automatically by CMake when a system package is not
+available, so the first configure needs network access. The native Kev HTTP
+client is enabled by default (`DUNGEON_ENABLE_KEV=ON`) and can be disabled for
+builds that do not need it:
+
+```sh
+cmake -S . -B build/nokev -DDUNGEON_ENABLE_KEV=OFF
+```
+
+Tests never require a running Kev server; the agent suite uses a fake transport.
 
 ## Building
 

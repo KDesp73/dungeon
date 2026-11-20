@@ -1,4 +1,7 @@
+#include "agent/agent.hpp"
+#include "agent/scripted_agent.hpp"
 #include "dungeon/controls.hpp"
+#include "dungeon/controls/input_source.hpp"
 #include "dungeon/core/ticker.hpp"
 #include "dungeon/core/version.hpp"
 #include "dungeon/display/buffer.hpp"
@@ -18,6 +21,7 @@
 #include <utility>
 
 #ifndef __EMSCRIPTEN__
+#include "agent/kev_agent.hpp"
 #include "dungeon/map/map.hpp"
 
 #include <CLI/CLI.hpp>
@@ -30,6 +34,19 @@
 #endif
 
 namespace {
+
+enum class AgentKind : unsigned char {
+    None,
+    Scripted,
+    Kev,
+};
+
+struct AgentOptions {
+    AgentKind   kind      = AgentKind::None;
+    std::string kev_url   = "http://127.0.0.1:8008";
+    int         interval  = 12;
+    bool        headless  = false;
+};
 
 #ifndef __EMSCRIPTEN__
 
@@ -48,12 +65,25 @@ void handle_interrupt(int) {
 class Application {
   public:
     explicit Application(std::optional<std::uint32_t> seed,
-                         std::string save_path = dungeon::save::kDefaultSavePath)
-        : _ticker(tick_interval()) {
-        const auto        layout = dungeon::display::tui::make_layout(_buffer.width(),
-                                                                     _buffer.height());
-        const std::size_t map_width  = layout.game.width > 2 ? layout.game.width - 2 : 0;
-        const std::size_t map_height = layout.game.height > 2 ? layout.game.height - 2 : 0;
+                         std::string save_path = dungeon::save::kDefaultSavePath,
+                         AgentOptions options = {})
+        : _options(options), _ticker(tick_interval()) {
+        // A headless run has no terminal to size the map from, so fall back to
+        // the same dimensions the game generator uses by default.
+        constexpr std::size_t kHeadlessMapWidth  = 64;
+        constexpr std::size_t kHeadlessMapHeight = 32;
+        std::size_t           map_width          = kHeadlessMapWidth;
+        std::size_t           map_height         = kHeadlessMapHeight;
+        if (!options.headless) {
+            const auto layout = dungeon::display::tui::make_layout(_buffer.width(),
+                                                                   _buffer.height());
+            if (layout.game.width > 2) {
+                map_width = layout.game.width - 2;
+            }
+            if (layout.game.height > 2) {
+                map_height = layout.game.height - 2;
+            }
+        }
 
         dungeon::scene::TitleSceneConfig title;
         title.title    = "DUNGEON";
@@ -90,6 +120,23 @@ class Application {
         };
 
         _scenes.push(std::make_unique<dungeon::scene::TitleScene>(std::move(title)));
+
+        if (!options.headless) {
+            _input = std::make_unique<dungeon::controls::TerminalKeySource>();
+        }
+
+#ifndef __EMSCRIPTEN__
+        if (options.kind == AgentKind::Scripted) {
+            _agent = std::make_unique<dungeon::agent::ScriptedAgent>();
+        } else if (options.kind == AgentKind::Kev) {
+#ifdef DUNGEON_ENABLE_KEV
+            _agent = std::make_unique<dungeon::agent::KevAgent>(
+                options.kev_url, nullptr, static_cast<std::size_t>(options.interval));
+#else
+            std::cerr << "--agent kev requires DUNGEON_ENABLE_KEV\n";
+#endif
+        }
+#endif
     }
 
     /// Runs one frame and returns false once the game should stop.
@@ -100,8 +147,34 @@ class Application {
             _scenes.update(_ticker.interval(), _context);
         }
 
-        const dungeon::controls::KeyEvent key = dungeon::controls::poll_key();
-        if (!key.is_none()) {
+        if (_agent) {
+            if (!_auto_started) {
+                _injected.push(dungeon::controls::KeyEvent::from_character('\n'));
+                _auto_started = true;
+            }
+
+            ++_tick;
+            if (_tick % static_cast<std::size_t>(_options.interval) == 0) {
+                const auto* game_scene = _scenes.find<dungeon::scene::GameScene>();
+                if (game_scene != nullptr) {
+                    _agent->observe(game_scene->game(), _scenes);
+                }
+            }
+            if (const auto decision = _agent->poll()) {
+                for (const dungeon::controls::KeyEvent key : decision->keys) {
+                    _injected.push(key);
+                }
+            }
+        }
+
+        for (int i = 0; i < 16; ++i) {
+            dungeon::controls::KeyEvent key = _injected.poll();
+            if (key.is_none() && _input) {
+                key = _input->poll();
+            }
+            if (key.is_none()) {
+                break;
+            }
             static_cast<void>(_scenes.handle_key(key, _context));
         }
 
@@ -109,8 +182,10 @@ class Application {
             return false;
         }
 
-        _scenes.draw(_buffer, _context);
-        _buffer.present();
+        if (!_options.headless) {
+            _scenes.draw(_buffer, _context);
+            _buffer.present();
+        }
 
         return true;
     }
@@ -125,10 +200,16 @@ class Application {
             std::chrono::duration<double>(1.0 / 60.0));
     }
 
-    dungeon::display::FrameBuffer _buffer;
-    dungeon::scene::SceneManager  _scenes;
-    dungeon::scene::SceneContext  _context{_scenes};
-    dungeon::core::Ticker         _ticker;
+    AgentOptions                              _options;
+    dungeon::display::FrameBuffer             _buffer;
+    dungeon::scene::SceneManager              _scenes;
+    dungeon::scene::SceneContext              _context{_scenes};
+    dungeon::core::Ticker                     _ticker;
+    std::unique_ptr<dungeon::controls::KeySource> _input;
+    dungeon::controls::QueuedKeySource        _injected;
+    std::unique_ptr<dungeon::agent::Agent>    _agent;
+    std::size_t                               _tick         = 0;
+    bool                                      _auto_started = false;
 };
 
 } // namespace
@@ -150,6 +231,17 @@ int main(int argc, char** argv) {
     app.add_option("--save-file", save_path, "Path used by the in-game save and load actions");
     bool print_map = false;
     app.add_flag("-p,--print-map", print_map, "Print a generated dungeon map and exit");
+
+    std::string agent_name = "none";
+    app.add_option("--agent", agent_name, "Agent driver: none, scripted, or kev")
+        ->check(CLI::IsMember({"none", "scripted", "kev"}));
+    std::string kev_url = "http://127.0.0.1:8008";
+    app.add_option("--kev-url", kev_url, "Kev endpoint URL");
+    int kev_interval = 12;
+    app.add_option("--kev-interval", kev_interval, "Observation cadence in ticks")
+        ->check(CLI::PositiveNumber);
+    bool headless = false;
+    app.add_flag("--headless", headless, "Run without terminal rendering (evaluation)");
 
     try {
         app.parse(argc, argv);
@@ -175,18 +267,38 @@ int main(int argc, char** argv) {
         seed_value = seed;
     }
 
+    AgentOptions agent_options;
+    if (agent_name == "scripted") {
+        agent_options.kind = AgentKind::Scripted;
+    } else if (agent_name == "kev") {
+#ifndef DUNGEON_ENABLE_KEV
+        std::cerr << "--agent kev is unavailable: built with DUNGEON_ENABLE_KEV=OFF\n";
+        return 1;
+#else
+        agent_options.kind    = AgentKind::Kev;
+        agent_options.kev_url = kev_url;
+        agent_options.interval = kev_interval;
+#endif
+    }
+    agent_options.headless = headless;
+
     std::signal(SIGINT, handle_interrupt);
 
-    Application application(seed_value, save_path);
+    Application application(seed_value, save_path, agent_options);
 
-    const dungeon::controls::TerminalSession terminal;
-    dungeon::display::tui::hide_cursor();
+    std::optional<dungeon::controls::TerminalSession> terminal;
+    if (!headless) {
+        terminal.emplace();
+        dungeon::display::tui::hide_cursor();
+    }
 
     while (g_running && application.step()) {
         std::this_thread::sleep_until(application.ticker().next_tick());
     }
 
-    dungeon::display::tui::show_cursor();
+    if (!headless) {
+        dungeon::display::tui::show_cursor();
+    }
 #else
     static_cast<void>(argc);
     static_cast<void>(argv);

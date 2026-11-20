@@ -13,6 +13,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 option(DUNGEON_BUILD_TESTS "Build the unit test suite" ON)
 option(DUNGEON_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
+option(DUNGEON_ENABLE_KEV "Build the native Kev agent client" ON)
 
 set(DUNGEON_SANITIZE "none" CACHE STRING
     "Sanitizers to enable: none, address, undefined, address,undefined, thread")
@@ -20,9 +21,11 @@ set_property(CACHE DUNGEON_SANITIZE PROPERTY STRINGS
     none address undefined address,undefined thread)
 
 if(EMSCRIPTEN)
-    # Sanitizers and the unit tests are not usable in the browser build.
+    # Sanitizers, the unit tests, and the agent subsystem are native-only for
+    # now. The browser already has its own synthetic key bridge.
     set(DUNGEON_SANITIZE "none" CACHE STRING "" FORCE)
     set(DUNGEON_BUILD_TESTS OFF)
+    set(DUNGEON_ENABLE_KEV OFF CACHE BOOL "" FORCE)
 
     # Emscripten emits an HTML page alongside the JavaScript and WebAssembly
     # output. `web/shell.html` supplies the xterm.js terminal around it.
@@ -55,8 +58,31 @@ file(GLOB_RECURSE DUNGEON_CORE_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 list(REMOVE_ITEM DUNGEON_CORE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
 
+if(NOT DUNGEON_ENABLE_KEV)
+    list(FILTER DUNGEON_CORE_SOURCES EXCLUDE REGEX "/src/agent/kev_.*\\.cpp$")
+endif()
+if(EMSCRIPTEN)
+    list(FILTER DUNGEON_CORE_SOURCES EXCLUDE REGEX "/src/agent/")
+endif()
+
 if(NOT DUNGEON_CORE_SOURCES)
     message(FATAL_ERROR "No game sources found under ${CMAKE_CURRENT_SOURCE_DIR}/src")
+endif()
+
+# The observation and policy layers use nlohmann/json to build and parse Kev's
+# typed request format. It is header-only and a build-time dependency only;
+# prefer a system package, otherwise fetch the pinned release as with CLI11.
+if(NOT EMSCRIPTEN)
+    find_package(nlohmann_json CONFIG QUIET)
+    if(NOT nlohmann_json_FOUND)
+        include(FetchContent)
+
+        set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
+        FetchContent_Declare(
+            nlohmann_json
+            URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz)
+        FetchContent_MakeAvailable(nlohmann_json)
+    endif()
 endif()
 
 add_library(dungeon_core STATIC ${DUNGEON_CORE_SOURCES})
@@ -72,6 +98,13 @@ target_include_directories(dungeon_core
 target_compile_definitions(dungeon_core PUBLIC
     DUNGEON_VERSION_STRING="${PROJECT_VERSION}"
     $<$<NOT:$<CONFIG:Release,MinSizeRel>>:DUNGEON_DEV=1>)
+
+if(NOT EMSCRIPTEN)
+    target_link_libraries(dungeon_core PUBLIC nlohmann_json::nlohmann_json)
+    if(DUNGEON_ENABLE_KEV)
+        target_compile_definitions(dungeon_core PUBLIC DUNGEON_ENABLE_KEV=1)
+    endif()
+endif()
 
 dungeon_set_warnings(dungeon_core)
 dungeon_enable_sanitizers(dungeon_core)
