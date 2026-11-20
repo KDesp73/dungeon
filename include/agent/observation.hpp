@@ -46,6 +46,16 @@ struct AgentObservation {
         char        glyph = '\0';
     };
 
+    /// A collectible item sitting on the map. Coins and diamonds carry gold;
+    /// equipment and potions are valuable without a direct gold value.
+    struct LootInfo {
+        std::string name;
+        char        glyph = '\0';
+        int         gold  = 0;
+        Cell        cell;
+        std::size_t distance = 0;
+    };
+
     struct StoreOption {
         std::string name;
         std::string description;
@@ -82,6 +92,7 @@ struct AgentObservation {
 
     std::optional<EnemyInfo> nearest_enemy;
     std::vector<Obstacle>    obstacles;
+    std::vector<LootInfo>    loot; ///< Items on the map, excluding the quest key.
 
     bool                     chest_nearby    = false;
     std::vector<std::string> chest_items;

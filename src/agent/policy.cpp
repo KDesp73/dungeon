@@ -80,6 +80,18 @@ const char* glyph_name(char glyph) noexcept {
         return "a health potion";
     case '?':
         return "a chest";
+    case '$':
+        return "coins";
+    case 'V':
+        return "a diamond";
+    case '/':
+        return "a sword";
+    case 'T':
+        return "a greatsword";
+    case 'd':
+        return "a shield";
+    case 'm':
+        return "chainmail";
     case '[':
         return "the exit";
     default:
@@ -143,6 +155,25 @@ std::optional<AgentObservation::Cell> nearest_obstacle(const AgentObservation& o
 
 bool low_health(const AgentObservation& observation) noexcept {
     return observation.hp > 0 && observation.hp * 3 <= observation.max_hp;
+}
+
+/// Chooses a reachable collectible: nearest first, then highest gold value.
+std::optional<AgentObservation::Cell> best_loot(const AgentObservation& observation) {
+    const AgentObservation::LootInfo* best = nullptr;
+    for (const AgentObservation::LootInfo& item : observation.loot) {
+        if (!in_bounds(observation, item.cell.x, item.cell.y) ||
+            !walkable(observation, item.cell.x, item.cell.y)) {
+            continue;
+        }
+        if (best == nullptr || item.distance < best->distance ||
+            (item.distance == best->distance && item.gold > best->gold)) {
+            best = &item;
+        }
+    }
+    if (best == nullptr) {
+        return std::nullopt;
+    }
+    return best->cell;
 }
 
 void push(AgentDecision& decision, KeyEvent key) {
@@ -436,6 +467,11 @@ AgentDecision decide(const AgentObservation& observation, const KevAnswers& answ
     if (observation.exit_unlocked) {
         targets.push_back(observation.exit_cell);
     }
+    // Detour for coins and items whenever it is safe. This is also the
+    // deterministic fallback's way of building wealth for store upgrades.
+    if (const auto loot_cell = best_loot(observation)) {
+        targets.insert(targets.begin(), *loot_cell);
+    }
     if (observation.boss_level) {
         if (observation.anchors_remaining > 0) {
             if (const auto anchor = nearest_obstacle(observation, 'A')) {
@@ -456,6 +492,10 @@ AgentDecision decide(const AgentObservation& observation, const KevAnswers& answ
             targets.insert(targets.begin(), observation.key_cell);
         } else if (answers.goal.choice == "fight" && observation.nearest_enemy) {
             targets.insert(targets.begin(), observation.nearest_enemy->cell);
+        } else if (answers.goal.choice == "loot") {
+            if (const auto loot_cell = best_loot(observation)) {
+                targets.insert(targets.begin(), *loot_cell);
+            }
         }
     }
 
@@ -511,15 +551,17 @@ std::string build_kev_request(const AgentObservation& observation, std::size_t o
 
     json goal = json::object();
     goal["type"]         = "choice";
-    goal["instructions"] = "Choose the player's immediate objective. Prefer survival, then "
-                           "getting the key, then reaching the exit.";
+    goal["instructions"] =
+        "Choose the player's immediate objective. Prefer survival, then collect nearby coins and "
+        "valuable items (gold buys permanent upgrades), then get the key, then reach the exit.";
     goal["criteria"]     = {{"heal", "Health is low and a potion is available"},
                             {"flee", "The nearest enemy is dangerous and avoiding it is safer"},
                             {"fight", "The nearest enemy is worth killing for gold or because it "
                                       "blocks progress"},
                             {"find_key", "The exit is locked and the key has not been found"},
                             {"reach_exit", "The player has the key and should descend"},
-                            {"loot", "A chest or valuable item is nearby and it is safe to take"}};
+                            {"loot", "Coins, diamonds, equipment, or a chest are reachable and "
+                                      "safe to collect; gold pays for upgrades"}};
 
     json engage = json::object();
     engage["type"]         = "noul";

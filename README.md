@@ -29,7 +29,8 @@ a walk-up shopkeeper, and escalating boss fights with a final victory.
 | Gameplay     | WASD/arrow movement, item action hooks, enemy AI, combat, coin drops, health potions, leveling, store upgrades, and bosses |
 
 The executable accepts `--help`, `--version`, `--seed <n>`, `--save-file <path>`,
-`--print-map`, and the agent flags `--agent`, `--kev-url`, `--kev-interval`, and `--headless`.
+`--print-map`, and the agent flags `--agent`, `--kev-url`, `--kev-interval`,
+`--headless`, and `--verbose`.
 `--seed` makes dungeon generation reproducible, and `--print-map` writes the
 generated dungeon to stdout, reports its seed on stderr, and exits. `--save-file`
 changes the path used by the in-game save and load actions; the default is
@@ -71,14 +72,43 @@ release builds and never jumps past the final boss.
 Passing the same seed to `--print-map` twice produces the same dungeon.
 Without `--seed`, a fresh random seed is chosen and reported on stderr.
 
-### Automated agents
+### Watching the agent play
+
+The easiest way to watch a bot is to leave off `--headless` — the agent plays in
+the normal terminal UI, with the same rendering and scenes a human sees. Use a
+terminal at least 30 rows tall so the game viewport can fit the generated map;
+a warning is printed if it is too small. `--verbose` adds a per-decision trace on
+stderr so you can see what the agent observed and which keys it chose:
+
+```sh
+# Watch the deterministic bot move through the dungeon.
+./build/dev/dungeon --agent scripted --seed 12345 --verbose
+
+# Watch Kev play (start your local server first).
+./build/dev/dungeon --agent kev --seed 12345 --verbose \
+    --kev-url http://127.0.0.1:8008 --kev-interval 12
+```
+
+You will see lines like:
+
+```
+[agent] observe depth=1 hp=100 gold=0 enemies=1
+[agent] -> up
+```
+
+The agent is explicitly incentivised to collect loot: its state includes a
+`loot` list with each nearby item's name, glyph, gold value, and distance, and
+the `goal` question asks it to weigh collecting coins and equipment against
+getting the key or descending (gold pays for permanent store upgrades). Choosing
+`loot` is now an actionable goal, and the deterministic fallback also detours
+for coins and chests whenever there is no more urgent threat.
 
 The game can drive itself through the same `KeyEvent` path as human input, so the
 simulation and every scene behave exactly as they do interactively. Choose a
 driver with `--agent <none|scripted|kev>`:
 
 ```sh
-# Deterministic BFS-based baseline; no model or network needed.
+# Deterministic BFS-based baseline without rendering (unattended evaluation).
 ./build/dev/dungeon --agent scripted --seed 12345 --headless
 
 # Typed judgments from a local Kev server (default: http://127.0.0.1:8008).
@@ -86,15 +116,15 @@ driver with `--agent <none|scripted|kev>`:
     --kev-url http://127.0.0.1:8008 --kev-interval 12
 ```
 
-`--headless` skips terminal rendering, which is useful for unattended evaluation;
-the map still uses a fixed 64x32 layout in that mode. `--kev-interval` sets the
-observation cadence in 60 Hz ticks (default 12). The agent never mutates game
-state directly: it observes structured `Game`/`Map` state, answers a small set of
-typed `choice`, `noul`, and `score` questions, and the C++ policy maps the answers
-to legal keys. An asynchronous worker performs the HTTP request, so inference
-never blocks the simulation; stale replies are discarded and a deterministic
-fallback keeps the bot moving while a request is in flight. The native Kev client
-is optional (see `DUNGEON_ENABLE_KEV` below) and is not built for WebAssembly.
+`--headless` skips terminal rendering and uses a fixed 64x32 map layout, which is
+useful for evaluation. `--kev-interval` sets the observation cadence in 60 Hz
+ticks (default 12). The agent never mutates game state directly: it observes
+structured `Game`/`Map` state, answers a small set of typed `choice`, `noul`, and
+`score` questions, and the C++ policy maps the answers to legal keys. An
+asynchronous worker performs the HTTP request, so inference never blocks the
+simulation; stale replies are discarded and a deterministic fallback keeps the
+bot moving while a request is in flight. The native Kev client is optional (see
+`DUNGEON_ENABLE_KEV` below) and is not built for WebAssembly.
 
 ## Map output
 

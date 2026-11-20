@@ -13,6 +13,8 @@
 #include "dungeon/scene/scene_manager.hpp"
 #include "dungeon/scene/store_scene.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <chrono>
 #include <cstddef>
 #include <functional>
@@ -79,6 +81,22 @@ AgentObservation make_observation() {
     observation.attack        = 10;
     observation.defence       = 5;
     return observation;
+}
+
+/// One coin one step east of the player, plus the key one step west.
+AgentObservation make_loot_observation() {
+    AgentObservation observation = make_observation();
+    observation.visible[1][3]    = '$';
+    observation.loot             = {{"coin", '$', 1, {3, 1}, 1}};
+    return observation;
+}
+
+MapSpec make_loot_spec() {
+    MapSpec spec = make_spec();
+    spec.items.push_back({dungeon::map::entities::ItemKind::Coin, 3, 2});
+    spec.items.push_back({dungeon::map::entities::ItemKind::Diamond, 4, 3});
+    spec.items.push_back({dungeon::map::entities::ItemKind::HealthPotion, 3, 4});
+    return spec;
 }
 
 #ifdef DUNGEON_ENABLE_KEV
@@ -296,4 +314,80 @@ DUNGEON_TEST(agent, scripted_agent_makes_progress_without_a_server) {
     REQUIRE(decision.has_value());
     CHECK(!decision->keys.empty());
     CHECK(!bot.poll().has_value());
+}
+
+DUNGEON_TEST(agent, observation_reports_loot_with_gold_values) {
+    SceneManager scenes;
+    GameSceneConfig config;
+    config.layout = make_loot_spec();
+    scenes.push(std::make_unique<GameScene>(config));
+    const auto* game_scene = scenes.find<GameScene>();
+    REQUIRE(game_scene != nullptr);
+
+    const AgentObservation observation =
+        dungeon::agent::AgentObservation::from(game_scene->game(), scenes);
+    CHECK_EQ(observation.loot.size(), std::size_t(3));
+
+    bool found_coin     = false;
+    bool found_diamond  = false;
+    bool found_potion   = false;
+    for (const auto& item : observation.loot) {
+        if (item.name == "coin" && item.gold == 1 && item.cell.x == 3 && item.cell.y == 2) {
+            found_coin = true;
+        }
+        if (item.name == "diamond" && item.gold == 10 && item.cell.x == 4 && item.cell.y == 3) {
+            found_diamond = true;
+        }
+        if (item.name == "health potion" && item.gold == 0 && item.cell.x == 3 &&
+            item.cell.y == 4) {
+            found_potion = true;
+        }
+    }
+    CHECK(found_coin);
+    CHECK(found_diamond);
+    CHECK(found_potion);
+
+    const nlohmann::json state = nlohmann::json::parse(observation.to_json());
+    CHECK(state.contains("loot"));
+    CHECK(state["loot"].is_array());
+    CHECK_EQ(state["loot"].size(), std::size_t(3));
+    CHECK_EQ(state["progress"]["loot_gold"], 11);
+    CHECK(state["progress"].contains("nearest_loot"));
+}
+
+DUNGEON_TEST(agent, loot_goal_and_fallback_collect_nearby_items) {
+    const AgentObservation observation = make_loot_observation();
+
+    // Kev explicitly choosing loot should override the key on the other side.
+    KevAnswers answers;
+    answers.received   = true;
+    answers.goal.choice = "loot";
+    const AgentDecision kev_decision = dungeon::agent::decide(observation, answers);
+    REQUIRE(kev_decision.keys.size() == 1);
+    CHECK_EQ(kev_decision.keys.front(), KeyEvent::from_kind(KeyKind::Right));
+
+    // The deterministic fallback should also pick up the coin.
+    const AgentDecision fallback = dungeon::agent::decide(observation, KevAnswers{});
+    REQUIRE(fallback.keys.size() == 1);
+    CHECK_EQ(fallback.keys.front(), KeyEvent::from_kind(KeyKind::Right));
+}
+
+DUNGEON_TEST(agent, legal_actions_name_loot_glyphs) {
+    const auto actions = dungeon::agent::legal_actions(make_loot_observation());
+    bool names_coins   = false;
+    for (const auto& action : actions) {
+        if (action.id == "right") {
+            names_coins = action.description.find("coins") != std::string::npos;
+        }
+    }
+    CHECK(names_coins);
+}
+
+DUNGEON_TEST(agent, request_includes_loot_incentive) {
+    const std::string request = dungeon::agent::build_kev_request(make_loot_observation(), 3);
+    CHECK(request.find("collect nearby coins") != std::string::npos);
+    CHECK(request.find("gold pays for upgrades") != std::string::npos);
+    CHECK(request.find("\"loot\"") != std::string::npos);
+    CHECK(request.find("\"nearest_loot\"") != std::string::npos);
+    CHECK(request.find("\"loot_gold\":1") != std::string::npos);
 }

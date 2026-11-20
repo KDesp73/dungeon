@@ -19,6 +19,11 @@ namespace {
 
 using nlohmann::json;
 
+// The crop sent to Kev is 21x13 around the player. Only loot inside that crop
+// is advertised, so the model never sees items that are absent from its map.
+constexpr std::size_t kVisibleRadiusX = 10;
+constexpr std::size_t kVisibleRadiusY = 6;
+
 const char* item_name(map::entities::ItemKind kind) noexcept {
     using map::entities::ItemKind;
     switch (kind) {
@@ -102,6 +107,14 @@ std::string describe_enemy(const AgentObservation& observation) {
         out << ", anchors " << enemy.anchors;
     }
     return out.str();
+}
+
+bool in_visible_crop(const AgentObservation& observation, AgentObservation::Cell cell) noexcept {
+    const std::size_t dx = cell.x > observation.player.x ? cell.x - observation.player.x
+                                                         : observation.player.x - cell.x;
+    const std::size_t dy = cell.y > observation.player.y ? cell.y - observation.player.y
+                                                         : observation.player.y - cell.y;
+    return dx <= kVisibleRadiusX && dy <= kVisibleRadiusY;
 }
 
 } // namespace
@@ -232,6 +245,15 @@ AgentObservation AgentObservation::from(const game::Game& game,
         if (const auto* key = dynamic_cast<const Key*>(entity.get())) {
             observation.key_on_map = true;
             observation.key_cell   = {key->x, key->y};
+        } else if (const auto* item = dynamic_cast<const Item*>(entity.get())) {
+            const bool empty_chest = item->kind() == ItemKind::Chest &&
+                                     dynamic_cast<const Chest*>(item)->empty();
+            if (item->kind() != ItemKind::Key && !empty_chest) {
+                const AgentObservation::Cell cell{item->x, item->y};
+                observation.loot.push_back(AgentObservation::LootInfo{
+                    item_name(item->kind()), item->tile(), item->gold(), cell,
+                    manhattan(observation.player, cell)});
+            }
         } else if (const auto* enemy = dynamic_cast<const Enemy*>(entity.get())) {
             if (enemy->stats().hp > 0) {
                 observation.obstacles.push_back({enemy->x, enemy->y, enemy->tile()});
@@ -301,11 +323,42 @@ std::string AgentObservation::to_json() const {
                             {"distance_to_key", distance_to_key},
                             {"nearest_enemy", describe_enemy(*this)},
                             {"anchors_remaining", anchors_remaining}};
-    state["visible_map"] = crop(*this, 10, 6);
+    state["visible_map"] = crop(*this, kVisibleRadiusX, kVisibleRadiusY);
     state["messages"]    = recent_messages;
 
     if (nearest_enemy) {
         state["progress"]["enemy_distance"] = nearest_enemy->distance;
+    }
+
+    // Advertise collectible loot with its gold value so Kev can weigh detouring
+    // for coins and equipment against reaching the key or the exit.
+    json loot_items = json::array();
+    std::size_t loot_gold = 0;
+    const LootInfo* nearest = nullptr;
+    for (const LootInfo& item : loot) {
+        if (!in_visible_crop(*this, item.cell)) {
+            continue;
+        }
+        loot_items.push_back({{"name", item.name},
+                              {"glyph", std::string(1, item.glyph)},
+                              {"gold", item.gold},
+                              {"x", item.cell.x},
+                              {"y", item.cell.y},
+                              {"distance", item.distance}});
+        loot_gold += static_cast<std::size_t>(item.gold > 0 ? item.gold : 0);
+        if (nearest == nullptr || item.distance < nearest->distance ||
+            (item.distance == nearest->distance && item.gold > nearest->gold)) {
+            nearest = &item;
+        }
+    }
+    state["loot"]                     = loot_items;
+    state["progress"]["loot_visible"] = loot_items.size();
+    state["progress"]["loot_gold"]    = loot_gold;
+    if (nearest != nullptr) {
+        std::ostringstream description;
+        description << nearest->name << ", gold " << nearest->gold << ", distance "
+                    << nearest->distance;
+        state["progress"]["nearest_loot"] = description.str();
     }
 
     if (scene == SceneKind::Store || store_open) {

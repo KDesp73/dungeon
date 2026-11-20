@@ -46,7 +46,41 @@ struct AgentOptions {
     std::string kev_url   = "http://127.0.0.1:8008";
     int         interval  = 12;
     bool        headless  = false;
+    bool        verbose   = false;
 };
+
+#ifndef __EMSCRIPTEN__
+
+const char* key_name(const dungeon::controls::KeyEvent& key) noexcept {
+    using dungeon::controls::KeyKind;
+    switch (key.kind) {
+    case KeyKind::None:
+        return "none";
+    case KeyKind::Character:
+        return "char";
+    case KeyKind::Up:
+        return "up";
+    case KeyKind::Down:
+        return "down";
+    case KeyKind::Left:
+        return "left";
+    case KeyKind::Right:
+        return "right";
+    case KeyKind::Escape:
+        return "escape";
+    }
+    return "unknown";
+}
+
+void log_key(const dungeon::controls::KeyEvent& key) {
+    if (key.kind == dungeon::controls::KeyKind::Character) {
+        std::cerr << (key.value == '\n' ? "enter" : std::string(1, key.value));
+    } else {
+        std::cerr << key_name(key);
+    }
+}
+
+#endif // __EMSCRIPTEN__
 
 #ifndef __EMSCRIPTEN__
 
@@ -83,6 +117,15 @@ class Application {
             if (layout.game.height > 2) {
                 map_height = layout.game.height - 2;
             }
+#ifndef __EMSCRIPTEN__
+            // make_spec() needs room for a 3x3 room grid. Without it the map is
+            // empty and there is nothing for an agent (or a player) to explore.
+            if (map_width < 28 || map_height < 22) {
+                std::cerr << "warning: terminal viewport is " << map_width << 'x' << map_height
+                          << ", but map generation needs at least 28x22; "
+                             "resize the terminal (about 30 rows) or use --headless\n";
+            }
+#endif
         }
 
         dungeon::scene::TitleSceneConfig title;
@@ -158,9 +201,32 @@ class Application {
                 const auto* game_scene = _scenes.find<dungeon::scene::GameScene>();
                 if (game_scene != nullptr) {
                     _agent->observe(game_scene->game(), _scenes);
+#ifndef __EMSCRIPTEN__
+                    if (_options.verbose) {
+                        const auto& game = game_scene->game();
+                        const auto* player = game.player();
+                        std::cerr << "[agent] observe depth=" << game.depth() << " hp="
+                                  << (player != nullptr ? player->stats().hp : 0)
+                                  << " gold=" << (player != nullptr ? player->stats().gold : 0)
+                                  << " enemies=" << (game.nearest_enemy() != nullptr ? 1 : 0)
+                                  << '\n';
+                    }
+#endif
                 }
             }
             if (const auto decision = _agent->poll()) {
+#ifndef __EMSCRIPTEN__
+                if (_options.verbose && !decision->keys.empty()) {
+                    std::cerr << "[agent] -> ";
+                    for (std::size_t i = 0; i < decision->keys.size(); ++i) {
+                        if (i != 0) {
+                            std::cerr << ' ';
+                        }
+                        log_key(decision->keys[i]);
+                    }
+                    std::cerr << '\n';
+                }
+#endif
                 for (const dungeon::controls::KeyEvent key : decision->keys) {
                     _injected.push(key);
                 }
@@ -242,6 +308,8 @@ int main(int argc, char** argv) {
         ->check(CLI::PositiveNumber);
     bool headless = false;
     app.add_flag("--headless", headless, "Run without terminal rendering (evaluation)");
+    bool verbose = false;
+    app.add_flag("--verbose", verbose, "Log agent observations and decisions to stderr");
 
     try {
         app.parse(argc, argv);
@@ -281,6 +349,7 @@ int main(int argc, char** argv) {
 #endif
     }
     agent_options.headless = headless;
+    agent_options.verbose  = verbose;
 
     std::signal(SIGINT, handle_interrupt);
 
