@@ -92,7 +92,7 @@ stderr so you can see what the agent observed and which keys it chose:
 You will see lines like:
 
 ```
-[agent] observe depth=1 hp=100 gold=0 enemies=1
+[agent] observe depth=1 hp=100 gold=0 enemies=1 key=0
 [agent] -> up
 ```
 
@@ -101,7 +101,10 @@ The agent is explicitly incentivised to collect loot: its state includes a
 the `goal` question asks it to weigh collecting coins and equipment against
 getting the key or descending (gold pays for permanent store upgrades). Choosing
 `loot` is now an actionable goal, and the deterministic fallback also detours
-for coins and chests whenever there is no more urgent threat.
+for coins and chests whenever there is no more urgent threat. A key within six
+cells is grabbed before optional loot — even if Kev asked to loot — because it
+unlocks the exit for a very small detour; only an enemy within striking distance
+takes precedence.
 
 The game can drive itself through the same `KeyEvent` path as human input, so the
 simulation and every scene behave exactly as they do interactively. Choose a

@@ -461,7 +461,9 @@ AgentDecision decide(const AgentObservation& observation, const KevAnswers& answ
     }
 
     std::vector<AgentObservation::Cell> targets;
-    if (!observation.has_key && observation.key_on_map) {
+    const bool key_worth_grabbing = !observation.has_key && observation.key_on_map &&
+                                    observation.distance_to_key <= kNearKeyDistance;
+    if (!observation.has_key && observation.key_on_map && !key_worth_grabbing) {
         targets.push_back(observation.key_cell);
     }
     if (observation.exit_unlocked) {
@@ -497,6 +499,14 @@ AgentDecision decide(const AgentObservation& observation, const KevAnswers& answ
                 targets.insert(targets.begin(), *loot_cell);
             }
         }
+    }
+
+    // A nearby key unlocks the exit and costs little to grab, so it outranks
+    // optional loot (including Kev's explicit "loot" goal). Only an immediate
+    // melee threat is allowed to take precedence.
+    if (key_worth_grabbing &&
+        !(observation.nearest_enemy && observation.nearest_enemy->distance <= 2)) {
+        targets.insert(targets.begin(), observation.key_cell);
     }
 
     for (const AgentObservation::Cell& target : targets) {
@@ -552,13 +562,15 @@ std::string build_kev_request(const AgentObservation& observation, std::size_t o
     json goal = json::object();
     goal["type"]         = "choice";
     goal["instructions"] =
-        "Choose the player's immediate objective. Prefer survival, then collect nearby coins and "
-        "valuable items (gold buys permanent upgrades), then get the key, then reach the exit.";
+        "Choose the player's immediate objective. Prefer survival, then grab the key when it is "
+        "close, then collect nearby coins and valuable items (gold buys permanent upgrades), "
+        "then reach the exit.";
     goal["criteria"]     = {{"heal", "Health is low and a potion is available"},
                             {"flee", "The nearest enemy is dangerous and avoiding it is safer"},
                             {"fight", "The nearest enemy is worth killing for gold or because it "
                                       "blocks progress"},
-                            {"find_key", "The exit is locked and the key has not been found"},
+                            {"find_key", "The exit is locked; grab the key before optional loot "
+                                      "when it is close"},
                             {"reach_exit", "The player has the key and should descend"},
                             {"loot", "Coins, diamonds, equipment, or a chest are reachable and "
                                       "safe to collect; gold pays for upgrades"}};

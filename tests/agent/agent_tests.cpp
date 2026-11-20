@@ -75,6 +75,7 @@ AgentObservation make_observation() {
     observation.exit_cell     = {3, 1};
     observation.key_on_map    = true;
     observation.key_cell      = {1, 1};
+    observation.distance_to_key = 1;
     observation.hp            = 90;
     observation.max_hp        = 100;
     observation.gold          = 20;
@@ -83,9 +84,10 @@ AgentObservation make_observation() {
     return observation;
 }
 
-/// One coin one step east of the player, plus the key one step west.
+/// One coin one step east of the player, with no key to distract the loot tests.
 AgentObservation make_loot_observation() {
     AgentObservation observation = make_observation();
+    observation.key_on_map       = false;
     observation.visible[1][3]    = '$';
     observation.loot             = {{"coin", '$', 1, {3, 1}, 1}};
     return observation;
@@ -370,6 +372,33 @@ DUNGEON_TEST(agent, loot_goal_and_fallback_collect_nearby_items) {
     const AgentDecision fallback = dungeon::agent::decide(observation, KevAnswers{});
     REQUIRE(fallback.keys.size() == 1);
     CHECK_EQ(fallback.keys.front(), KeyEvent::from_kind(KeyKind::Right));
+}
+
+DUNGEON_TEST(agent, nearby_key_is_collected_before_loot) {
+    // The key is one step west; a coin is one step east.
+    AgentObservation observation = make_observation();
+    observation.visible[1][3]    = '$';
+    observation.loot             = {{"coin", '$', 1, {3, 1}, 1}};
+
+    const AgentDecision fallback = dungeon::agent::decide(observation, KevAnswers{});
+    REQUIRE(fallback.keys.size() == 1);
+    CHECK_EQ(fallback.keys.front(), KeyEvent::from_kind(KeyKind::Left));
+
+    // Even an explicit Kev "loot" goal must not skip a close key.
+    KevAnswers answers;
+    answers.received    = true;
+    answers.goal.choice = "loot";
+    const AgentDecision kev_decision = dungeon::agent::decide(observation, answers);
+    REQUIRE(kev_decision.keys.size() == 1);
+    CHECK_EQ(kev_decision.keys.front(), KeyEvent::from_kind(KeyKind::Left));
+
+    // An immediate enemy is still more urgent than the key.
+    observation.nearest_enemy = AgentObservation::EnemyInfo{};
+    observation.nearest_enemy->distance = 1;
+    observation.nearest_enemy->cell     = {3, 1};
+    const AgentDecision threatened = dungeon::agent::decide(observation, KevAnswers{});
+    REQUIRE(threatened.keys.size() == 1);
+    CHECK_EQ(threatened.keys.front(), KeyEvent::from_kind(KeyKind::Right));
 }
 
 DUNGEON_TEST(agent, legal_actions_name_loot_glyphs) {

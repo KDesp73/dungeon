@@ -329,6 +329,8 @@ std::string AgentObservation::to_json() const {
     if (nearest_enemy) {
         state["progress"]["enemy_distance"] = nearest_enemy->distance;
     }
+    state["progress"]["key_close"] =
+        key_on_map && !has_key && distance_to_key <= kNearKeyDistance;
 
     // Advertise collectible loot with its gold value so Kev can weigh detouring
     // for coins and equipment against reaching the key or the exit.

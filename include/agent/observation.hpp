@@ -114,6 +114,10 @@ struct AgentObservation {
     [[nodiscard]] std::string to_json() const;
 };
 
+/// A key within this Manhattan distance is worth grabbing before optional loot:
+/// it unlocks the exit at very little detour cost.
+inline constexpr std::size_t kNearKeyDistance = 6;
+
 /// Manhattan distance between two cells.
 [[nodiscard]] std::size_t manhattan(AgentObservation::Cell lhs,
                                     AgentObservation::Cell rhs) noexcept;
