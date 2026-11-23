@@ -1,5 +1,7 @@
 # dungeon
 
+> devlog: https://lab.kdesp73.org/apps/content/blog?doc=devlog%2F2026-11-23-dungeon-development.md
+
 A real-time, top-down 2D action RPG under development in C++20 for the
 terminal, built without a game engine.
 
